@@ -114,20 +114,7 @@ case "$( uname )" in                #(
   NONSTOP* )        nonstop=true ;;
 esac
 
-# Auto-download gradle-wrapper.jar if missing
-WRAPPER_JAR="$APP_HOME/gradle/wrapper/gradle-wrapper.jar"
-if [ ! -f "$WRAPPER_JAR" ]; then
-    echo "Downloading gradle-wrapper.jar..."
-    if command -v curl >/dev/null 2>&1; then
-        curl -L -o "$WRAPPER_JAR" "https://raw.githubusercontent.com/gradle/gradle/v8.0.2/gradle/wrapper/gradle-wrapper.jar"
-    elif command -v wget >/dev/null 2>&1; then
-        wget -O "$WRAPPER_JAR" "https://raw.githubusercontent.com/gradle/gradle/v8.0.2/gradle/wrapper/gradle-wrapper.jar"
-    else
-        die "Error: gradle-wrapper.jar is missing and neither curl nor wget is available."
-    fi
-fi
-
-CLASSPATH=$WRAPPER_JAR
+CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
 
 
 # Determine the Java command to use to start the JVM.
