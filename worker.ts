@@ -98,22 +98,29 @@ async function runCheck() {
                     isSubstitute: gamePlayer.substitute
                 };
 
+                let playerAlerted = false;
+
                 const prev = player.lastAlertedStats || player.lastStats;
                 if (prev) {
                     if (player.alerts.shotsOn && stats.shotsOnTarget > prev.shotsOnTarget) {
                         alerts.push(`🎯 ${player.name}: CHUTE NO ALVO! (Total: ${stats.shotsOnTarget})`);
+                        playerAlerted = true;
                     }
                     if (player.alerts.tackles && stats.tackles > prev.tackles) {
                         alerts.push(`🛡️ ${player.name}: NOVO DESARME! (Total: ${stats.tackles})`);
+                        playerAlerted = true;
                     }
                     if (player.alerts.yellow && stats.yellowCards > prev.yellowCards) {
                         alerts.push(`🟨 ${player.name}: CARTÃO AMARELO! (Total: ${stats.yellowCards})`);
+                        playerAlerted = true;
                     }
                     if (player.alerts.fouls && stats.fouls > prev.fouls) {
                         alerts.push(`⚠️ ${player.name}: COMETEU FALTA! (Total: ${stats.fouls})`);
+                        playerAlerted = true;
                     }
                     if (player.alerts.foulsDrawn && stats.foulsDrawn > prev.foulsDrawn) {
                         alerts.push(`🤕 ${player.name}: SOFREU FALTA! (Total: ${stats.foulsDrawn})`);
+                        playerAlerted = true;
                     }
                     if (player.alerts.shots && stats.shotsTotal > prev.shotsTotal) {
                         // Evita duplicidade se for chute no alvo (já notificado pelo shotsOn), 
@@ -124,6 +131,7 @@ async function runCheck() {
                         const isTarget = stats.shotsOnTarget > prev.shotsOnTarget;
                         if (!isTarget || !player.alerts.shotsOn) {
                              alerts.push(`👟 ${player.name}: CHUTOU! (Total: ${stats.shotsTotal})`);
+                             playerAlerted = true;
                         }
                     }
                     // Improved substitution detection:
@@ -137,18 +145,19 @@ async function runCheck() {
                     
                     if (player.alerts.subOut && !prev.isSubstitute && stats.isSubstitute) {
                         alerts.push(`🔄 ${player.name}: SUBSTITUÍDO!`);
+                        playerAlerted = true;
                     }
                 }
                 
                 // Atualiza o estado local do worker
                 const playerIndex = currentPlayers.findIndex(p => p.id === player.id);
                 if (playerIndex !== -1) {
-                    // Update lastAlertedStats if we generated alerts
-                    const newLastAlertedStats = (alerts.length > 0) ? stats : player.lastAlertedStats;
+                    // Update lastAlertedStats ONLY if THIS player generated alerts
+                    const newLastAlertedStats = playerAlerted ? stats : player.lastAlertedStats;
                     currentPlayers[playerIndex] = { ...player, lastStats: stats, lastAlertedStats: newLastAlertedStats };
                 }
                 
-                updates.push({ id: player.id, stats });
+                updates.push({ id: player.id, stats, hasAlert: playerAlerted });
             }
         } catch (e) {
             console.error('Worker fetch error for event', eventId, e);

@@ -20,8 +20,19 @@ addEventListener('checkPlayers', async (resolve, reject, args) => {
             playersByEvent[p.eventId].push(p);
         }
 
+        // Load saved state from Preferences to avoid stale checks
+        let savedStats = {};
+        try {
+             // We can access Capacitor plugins in the background runner context
+             const { value } = await Capacitor.Plugins.Preferences.get({ key: 'bg_player_stats' });
+             if (value) savedStats = JSON.parse(value);
+        } catch (e) {
+             console.warn('Failed to load bg stats', e);
+        }
+
         const updates = [];
         const alerts = [];
+        let stateChanged = false;
 
         for (const eventIdStr of Object.keys(playersByEvent)) {
             const eventId = Number(eventIdStr);
@@ -97,23 +108,40 @@ addEventListener('checkPlayers', async (resolve, reject, args) => {
                         isSubstitute: gamePlayer.substitute
                     };
 
-                    const prev = player.lastStats;
+                    // Use saved state if available, otherwise fallback to args state
+                    const prev = savedStats[player.id] || player.lastStats;
+                    let playerAlerted = false;
+
                     if (prev) {
                         if (player.alerts.shotsOn && stats.shotsOnTarget > prev.shotsOnTarget) {
                             alerts.push(`🎯 ${player.name}: CHUTE NO ALVO! (Total: ${stats.shotsOnTarget})`);
+                            playerAlerted = true;
                         }
                         if (player.alerts.tackles && stats.tackles > prev.tackles) {
                             alerts.push(`🛡️ ${player.name}: NOVO DESARME! (Total: ${stats.tackles})`);
+                            playerAlerted = true;
                         }
                         if (player.alerts.yellow && stats.yellowCards > prev.yellowCards) {
                             alerts.push(`🟨 ${player.name}: CARTÃO AMARELO! (Total: ${stats.yellowCards})`);
+                            playerAlerted = true;
                         }
                         if (player.alerts.fouls && stats.fouls > prev.fouls) {
                             alerts.push(`⚠️ ${player.name}: COMETEU FALTA! (Total: ${stats.fouls})`);
+                            playerAlerted = true;
+                        }
+                        if (player.alerts.foulsDrawn && stats.foulsDrawn > prev.foulsDrawn) {
+                            alerts.push(`🤕 ${player.name}: SOFREU FALTA! (Total: ${stats.foulsDrawn})`);
+                            playerAlerted = true;
                         }
                         if (player.alerts.subOut && !prev.isSubstitute && stats.isSubstitute) {
                             alerts.push(`🔄 ${player.name}: SUBSTITUÍDO!`);
+                            playerAlerted = true;
                         }
+                    }
+                    
+                    if (playerAlerted) {
+                        savedStats[player.id] = stats;
+                        stateChanged = true;
                     }
                     
                     updates.push({ id: player.id, stats });
@@ -122,6 +150,15 @@ addEventListener('checkPlayers', async (resolve, reject, args) => {
             } catch (err) {
                 console.error('Background fetch error', err);
             }
+        }
+        
+        if (stateChanged) {
+            try {
+                await Capacitor.Plugins.Preferences.set({ 
+                    key: 'bg_player_stats', 
+                    value: JSON.stringify(savedStats) 
+                });
+            } catch (e) { console.warn('Failed to save bg stats', e); }
         }
 
         if (alerts.length > 0) {

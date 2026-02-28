@@ -5,6 +5,7 @@ import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { App as CapApp } from '@capacitor/app';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
+import { Preferences } from '@capacitor/preferences';
 import { Game, MonitoredPlayer, LogEntry, PlayerStats, GameLineups, GamePlayer } from './types';
 import * as api from './services/sofaService';
 import SoccerField from './components/SoccerField';
@@ -329,8 +330,10 @@ const App: React.FC = () => {
         appStateListener = CapApp.addListener('appStateChange', async ({ isActive }) => {
             if (isActive) {
                 forceUpdate();
-                // Stop background runner when app is active to save battery/resources
-                // (Optional: keep it running if you want double check)
+                // Clear background stats on resume so next background run starts fresh
+                try {
+                    await Preferences.remove({ key: 'bg_player_stats' });
+                } catch (e) {}
             } else if (isMonitoring) {
                 // App went to background, start/update background task
                 try {
@@ -420,9 +423,10 @@ const App: React.FC = () => {
                             return p;
                         }
                         
-                        // If we have alerts, update lastAlertedStats to current stats
+                        // If we have alerts for THIS player, update lastAlertedStats to current stats
                         // This ensures the next check uses these stats as the baseline
-                        const newLastAlertedStats = (alerts && alerts.length > 0 && hasChanged) ? update.stats : p.lastAlertedStats;
+                        const hasAlert = update.hasAlert;
+                        const newLastAlertedStats = hasAlert ? update.stats : p.lastAlertedStats;
 
                         return { ...p, lastStats: update.stats, lastAlertedStats: newLastAlertedStats };
                     }
