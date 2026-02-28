@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">livematch-tracker</string>
+    <string name="title_activity_main">livematch-tracker</string>
+    <string name="package_name">com.livematch.tracker</string>
+    <string name="custom_url_scheme">com.livematch.tracker</string>
+</resources>

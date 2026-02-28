@@ -1,0 +1,5 @@
+{
+  "name": "LiveMatch Tracker Mobile",
+  "description": "Ferramenta mobile otimizada para monitoramento de jogadores de futebol em tempo real usando dados do SofaScore.",
+  "requestFramePermissions": []
+}
