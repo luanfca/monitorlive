@@ -2,7 +2,7 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.livematch.tracker',
-  appName: 'livematch-tracker',
+  appName: 'Live Match Pro',
   webDir: 'dist',
   server: {
     androidScheme: 'https'
