@@ -29,6 +29,20 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        background: path.resolve(__dirname, 'worker.ts'),
+      },
+      output: {
+        entryFileNames: (chunkInfo) => {
+          if (chunkInfo.name === 'background') {
+            return 'background.js';
+          }
+          return 'assets/[name]-[hash].js';
+        }
+      }
+    }
   },
   server: {
     host: true
