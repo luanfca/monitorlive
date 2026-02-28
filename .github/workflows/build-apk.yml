@@ -67,6 +67,11 @@ jobs:
           
           echo "✅ AndroidManifest.xml patcheado com sucesso."
 
+      - name: Fix Gradle Wrapper
+        run: |
+          cd android
+          gradle wrapper
+
       - name: Build Android APK
         run: |
           cd android
