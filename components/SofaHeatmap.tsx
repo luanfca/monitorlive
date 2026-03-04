@@ -18,7 +18,7 @@ const SofaHeatmap: React.FC<SofaHeatmapProps> = ({ eventId, playerId, className,
       if (Capacitor.isNativePlatform()) {
         try {
           // Native: Fetch via CapacitorHttp to bypass CORS/Referer checks
-          const url = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/heatmap`;
+          const url = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/heatmap`;
           
           const response = await CapacitorHttp.get({
             url,

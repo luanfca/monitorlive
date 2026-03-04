@@ -21,7 +21,7 @@ export const normalizeString = (str: string): string => {
 // Helper centralizado para imagens de jogadores via Backend
 export const getPlayerImageUrl = (playerId: number): string => {
   if (Capacitor.isNativePlatform()) {
-      return `https://api.sofascore.com/api/v1/player/${playerId}/image`;
+      return `https://api.sofascore.app/api/v1/player/${playerId}/image`;
   }
   return `${API_BASE}/player-image/${playerId}`;
 };
@@ -33,7 +33,7 @@ export const getPlayerHeatmapUrl = (eventId: number, playerId: number): string =
       // unless SofaScore allows it. If not, we might need to fetch blob and convert to base64.
       // For now, let's try direct URL or fallback to our proxy if we were using one.
       // But since we don't have a deployed proxy, we must try direct.
-      return `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/heatmap`;
+      return `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/heatmap`;
   }
   return `${API_BASE}/heatmap/${eventId}/${playerId}`;
 };
@@ -131,16 +131,16 @@ const fetchBackendData = async (endpoint: string) => {
         
         // Mapeamento de Endpoints para URL Real do SofaScore
         if (endpoint === '/live') {
-            directUrl = 'https://api.sofascore.com/api/v1/sport/football/events/live';
+            directUrl = 'https://api.sofascore.app/api/v1/sport/football/events/live';
         } else if (endpoint.startsWith('/lineups/')) {
             const id = endpoint.split('/')[2];
-            directUrl = `https://api.sofascore.com/api/v1/event/${id}/lineups`;
+            directUrl = `https://api.sofascore.app/api/v1/event/${id}/lineups`;
         } else if (endpoint.startsWith('/player/')) {
             // /player/:eventId/:playerId -> /event/:eventId/player/:playerId/statistics
             const parts = endpoint.split('/');
             const eventId = parts[2];
             const playerId = parts[3];
-            directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/statistics`;
+            directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/statistics`;
         } else if (endpoint.startsWith('/heatmap/')) {
              // /heatmap/:eventId/:playerId -> /event/:eventId/player/:playerId/heatmap
              const parts = endpoint.split('/');
@@ -148,16 +148,16 @@ const fetchBackendData = async (endpoint: string) => {
              const playerId = parts[3];
              // Check if it's /data
              if (parts[4] === 'data') {
-                 directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/heatmap`;
+                 directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/heatmap`;
              } else {
-                 directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/heatmap`;
+                 directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/heatmap`;
              }
         } else if (endpoint.startsWith('/sport/football/scheduled-events/')) {
             const date = endpoint.split('/').pop();
-            directUrl = `https://api.sofascore.com/api/v1/sport/football/scheduled-events/${date}`;
+            directUrl = `https://api.sofascore.app/api/v1/sport/football/scheduled-events/${date}`;
         } else {
             // Default fallback
-            directUrl = `https://api.sofascore.com/api/v1${endpoint}`;
+            directUrl = `https://api.sofascore.app/api/v1${endpoint}`;
         }
 
         // Append timestamp
@@ -165,23 +165,19 @@ const fetchBackendData = async (endpoint: string) => {
 
         console.log(`Native Fetch: ${directUrl}`);
 
-        // Tenta simular o App Nativo do SofaScore (menos restrições que a Web)
-        const mobileUA = 'SofaScore/6.1.5 (Android 13; SM-S918B; en)';
+        // Tenta simular um navegador mobile real para evitar bloqueios de ISP/Cloudflare no Wi-Fi
+        const mobileUA = 'Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
         
-        const doRequest = async (retries = 3, delay = 1000, useWebHeaders = false): Promise<any> => {
+        const doRequest = async (retries = 3, delay = 1000, useWebHeaders = true): Promise<any> => {
             try {
                 const headers: any = {
                     'Cache-Control': 'no-cache',
-                    'Accept': 'application/json, text/plain, */*',
-                    'User-Agent': useWebHeaders ? 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36' : mobileUA,
-                    'Connection': 'keep-alive'
+                    'Accept': '*/*',
+                    'User-Agent': mobileUA,
+                    'Connection': 'keep-alive',
+                    'Origin': 'https://www.sofascore.com',
+                    'Referer': 'https://www.sofascore.com/'
                 };
-
-                // Web headers só se falhar o modo nativo ou se for fallback
-                if (useWebHeaders) {
-                    headers['Origin'] = 'https://www.sofascore.com';
-                    headers['Referer'] = 'https://www.sofascore.com/';
-                }
 
                 const response = await CapacitorHttp.get({
                     url: directUrl,
