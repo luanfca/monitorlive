@@ -172,8 +172,8 @@ const fetchBackendData = async (endpoint: string) => {
 
         console.log(`Native Fetch: ${directUrl}`);
 
-        // Tenta simular um navegador mobile real para evitar bloqueios de ISP/Cloudflare no Wi-Fi
-        const mobileUA = 'Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+        // Atualizado User-Agent para uma versão mais recente
+        const mobileUA = 'Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36';
         
         const doRequest = async (retries = 3, delay = 1000, useWebHeaders = true): Promise<any> => {
             try {
@@ -186,11 +186,15 @@ const fetchBackendData = async (endpoint: string) => {
                     'Referer': 'https://www.sofascore.com/'
                 };
 
+                console.log(`Executing Native Request to: ${directUrl}`);
+
                 const response = await CapacitorHttp.get({
                     url: directUrl,
                     headers: headers
                 });
 
+                console.log(`Native Response Status: ${response.status}`);
+                
                 if (response.status === 404) return null;
                 
                 // Se for bloqueio (403) ou erro de servidor (5xx), tenta novamente
@@ -206,7 +210,10 @@ const fetchBackendData = async (endpoint: string) => {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
-                if (response.status >= 400) throw new Error(`HTTP error! status: ${response.status}`);
+                if (response.status >= 400) {
+                    console.error(`Native Request failed with status ${response.status}:`, response.data);
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 
                 let data = response.data;
                 if (typeof data === 'string') {
@@ -218,6 +225,7 @@ const fetchBackendData = async (endpoint: string) => {
                 }
                 return data;
             } catch (err) {
+                console.error('Native Request Exception:', err);
                 if (retries > 0) {
                      console.warn(`Network error, retrying in ${delay}ms...`, err);
                      await new Promise(resolve => setTimeout(resolve, delay));
@@ -253,6 +261,7 @@ const fetchBackendData = async (endpoint: string) => {
                 if (response.status === 404) return null;
                 throw new Error(`Local proxy error: ${response.status}`);
             }
+            if (response.status === 204) return null;
             return await response.json();
         } catch (error) {
             console.error('Local proxy failed in Web Mode', error);

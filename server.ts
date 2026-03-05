@@ -46,6 +46,8 @@ async function startServer() {
         headers
       });
 
+      console.log(`SofaScore API response status: ${response.status} for ${url}`);
+
       if (!response.ok) {
         if (response.status === 404) {
             return res.status(404).json({ error: 'Not found' });
@@ -59,13 +61,16 @@ async function startServer() {
         res.setHeader('Content-Type', contentType);
       }
 
-      if (response.body) {
-          // @ts-ignore
-          const nodeStream = Readable.fromWeb(response.body);
-          nodeStream.pipe(res);
-      } else {
-          res.end();
+      // Buffer the response to check if it's empty
+      const buffer = await response.arrayBuffer();
+      console.log(`Response size: ${buffer.byteLength} bytes`);
+      
+      if (buffer.byteLength === 0) {
+          console.warn(`Empty response from ${url}`);
+          return res.status(204).end();
       }
+
+      res.send(Buffer.from(buffer));
     } catch (error) {
       console.error('Proxy error:', error);
       res.status(500).json({ error: 'Proxy error' });
