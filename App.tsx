@@ -241,7 +241,7 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-      addLog('Iniciando LiveMatch v2.1 (Anti-Bloqueio Ativado)', 'info');
+      addLog('Iniciando LiveMatch v2.2 (Anti-Bloqueio Ativado)', 'info');
       if (Capacitor.isNativePlatform()) {
           addLog('Modo Nativo Detectado: Usando CapacitorHttp com Rotação de UA', 'success');
       } else {
