@@ -196,7 +196,7 @@ const fetchBackendData = async (endpoint: string) => {
                 });
 
                 logService.addLog('info', `Native Response Status: ${response.status}`);
-                logService.addLog('info', `Native Response Data Preview:`, typeof response.data === 'string' ? response.data.substring(0, 200) : JSON.stringify(response.data).substring(0, 200));
+                logService.addLog('info', `Native Response Data Preview:`, typeof response.data === 'string' ? response.data.substring(0, 1000) : JSON.stringify(response.data).substring(0, 1000));
                 
                 if (response.status === 404) return null;
                 
@@ -223,7 +223,7 @@ const fetchBackendData = async (endpoint: string) => {
                     try {
                         data = JSON.parse(data);
                     } catch (e) {
-                        console.error('Error parsing native response', e);
+                        logService.addLog('error', 'Error parsing native response', e);
                     }
                 }
                 return data;
