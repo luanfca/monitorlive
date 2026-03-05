@@ -66,33 +66,40 @@ const PROXY_PROVIDERS = [
     // 3. ThingProxy - Outra alternativa
     (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
     // 4. AllOrigins (JSON) - Caso o Raw falhe (tratamento especial no fetch)
-    (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
+    (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+    // 5. Adicionando mais opções para contornar bloqueios
+    (url: string) => `https://proxy.cors.sh/${url}`, // Pode requerer header, mas vale tentar
+    (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
 ];
 
 // Helper para tentar buscar via múltiplos proxies
 const fetchWithProxies = async (targetUrl: string): Promise<any> => {
     let lastError;
     
-    for (const proxyGen of PROXY_PROVIDERS) {
+    // Embaralha a lista de proxies para não tentar sempre na mesma ordem
+    const shuffledProxies = [...PROXY_PROVIDERS].sort(() => Math.random() - 0.5);
+    
+    for (const proxyGen of shuffledProxies) {
         const proxyUrl = proxyGen(targetUrl);
         console.log(`Trying Proxy: ${proxyUrl}`);
         
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // Timeout reduzido para 10s para girar mais rápido
 
             const response = await fetch(proxyUrl, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Cache-Control': 'no-cache'
+                    'Cache-Control': 'no-cache',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 },
                 signal: controller.signal
             });
 
             clearTimeout(timeoutId);
 
-            if (response.status === 404) return null; // Recurso não encontrado não é erro de proxy
+            if (response.status === 404) return null; 
 
             if (response.ok) {
                 const text = await response.text();
@@ -114,7 +121,7 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
         }
         
         // Pequeno delay antes de tentar o próximo
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 300));
     }
     
     throw lastError || new Error('All proxies failed');
