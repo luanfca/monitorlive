@@ -223,7 +223,11 @@ const fetchBackendData = async (endpoint: string) => {
                     try {
                         data = JSON.parse(data);
                     } catch (e) {
-                        logService.addLog('error', 'Error parsing native response', e);
+                        logService.addLog('error', 'Error parsing native response', {
+                            error: e,
+                            rawData: data.substring(0, 1000) // Loga o conteúdo bruto para debug
+                        });
+                        return null; // Retorna null se não conseguir parsear
                     }
                 }
                 return data;
