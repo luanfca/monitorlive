@@ -11,7 +11,6 @@ import * as api from './services/sofaService';
 import SoccerField from './components/SoccerField';
 import SofaImage from './components/SofaImage';
 import SofaHeatmap from './components/SofaHeatmap';
-import { LogViewer } from './components/LogViewer';
 
 
 // --- Helpers Globais ---
@@ -214,7 +213,6 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [lastSync, setLastSync] = useState<string>('Aguardando primeira varredura...');
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const [selectedPlayerDetails, setSelectedPlayerDetails] = useState<MonitoredPlayer | null>(null);
@@ -243,7 +241,7 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-      addLog('Iniciando LiveMatch v2.2 (Anti-Bloqueio Ativado)', 'info');
+      addLog('Iniciando LiveMatch v2.1 (Anti-Bloqueio Ativado)', 'info');
       if (Capacitor.isNativePlatform()) {
           addLog('Modo Nativo Detectado: Usando CapacitorHttp com Rotação de UA', 'success');
       } else {
@@ -1334,12 +1332,6 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
                 >
                     <Settings size={20} />
                 </button>
-                <button 
-                    onClick={() => setIsLogsOpen(true)} 
-                    className="h-12 w-12 flex items-center justify-center bg-zinc-900 text-zinc-400 border border-zinc-800 rounded-2xl hover:text-white hover:border-zinc-700 transition-colors active:scale-95"
-                >
-                    <Activity size={20} />
-                </button>
             </div>
         </div>
       </div>
@@ -1501,7 +1493,6 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
 
         {isHelpOpen && renderHelpModal()}
         {selectedPlayerDetails && <PlayerDetailsModal player={selectedPlayerDetails} onClose={() => setSelectedPlayerDetails(null)} />}
-        {isLogsOpen && <LogViewer onClose={() => setIsLogsOpen(false)} />}
         {isSettingsOpen && (
              <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-xl flex items-end md:items-center justify-center p-4 animate-in fade-in duration-300 safe-area-bottom">
                  <div className="bg-zinc-900/90 w-full max-w-sm rounded-[2.5rem] border border-white/10 p-8 relative shadow-2xl ring-1 ring-white/5">

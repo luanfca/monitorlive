@@ -2,7 +2,6 @@
 import { Capacitor } from '@capacitor/core';
 import { CapacitorHttp } from '@capacitor/core';
 import { Game, GameLineups, GamePlayer, PlayerStats } from '../types';
-import { logService } from './logService';
 
 // Configuração da Base URL (Prioridade para Variável de Ambiente, Fallback para Produção)
 // Usamos uma referência segura para o env para garantir acesso correto no Vite
@@ -22,7 +21,7 @@ export const normalizeString = (str: string): string => {
 // Helper centralizado para imagens de jogadores via Backend
 export const getPlayerImageUrl = (playerId: number): string => {
   if (Capacitor.isNativePlatform()) {
-      return `https://api.sofascore.app/api/v1/player/${playerId}/image`;
+      return `https://api.sofascore.com/api/v1/player/${playerId}/image`;
   }
   return `${API_BASE}/player-image/${playerId}`;
 };
@@ -34,7 +33,7 @@ export const getPlayerHeatmapUrl = (eventId: number, playerId: number): string =
       // unless SofaScore allows it. If not, we might need to fetch blob and convert to base64.
       // For now, let's try direct URL or fallback to our proxy if we were using one.
       // But since we don't have a deployed proxy, we must try direct.
-      return `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/heatmap`;
+      return `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/heatmap`;
   }
   return `${API_BASE}/heatmap/${eventId}/${playerId}`;
 };
@@ -67,40 +66,33 @@ const PROXY_PROVIDERS = [
     // 3. ThingProxy - Outra alternativa
     (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
     // 4. AllOrigins (JSON) - Caso o Raw falhe (tratamento especial no fetch)
-    (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-    // 5. Adicionando mais opções para contornar bloqueios
-    (url: string) => `https://proxy.cors.sh/${url}`, // Pode requerer header, mas vale tentar
-    (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+    (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
 ];
 
 // Helper para tentar buscar via múltiplos proxies
 const fetchWithProxies = async (targetUrl: string): Promise<any> => {
     let lastError;
     
-    // Embaralha a lista de proxies para não tentar sempre na mesma ordem
-    const shuffledProxies = [...PROXY_PROVIDERS].sort(() => Math.random() - 0.5);
-    
-    for (const proxyGen of shuffledProxies) {
+    for (const proxyGen of PROXY_PROVIDERS) {
         const proxyUrl = proxyGen(targetUrl);
-        logService.addLog('info', `Trying Proxy: ${proxyUrl}`);
+        console.log(`Trying Proxy: ${proxyUrl}`);
         
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // Timeout reduzido para 10s para girar mais rápido
+            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
             const response = await fetch(proxyUrl, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Cache-Control': 'no-cache',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    'Cache-Control': 'no-cache'
                 },
                 signal: controller.signal
             });
 
             clearTimeout(timeoutId);
 
-            if (response.status === 404) return null; 
+            if (response.status === 404) return null; // Recurso não encontrado não é erro de proxy
 
             if (response.ok) {
                 const text = await response.text();
@@ -112,17 +104,17 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
                     }
                     return data;
                 } catch (parseError) {
-                    logService.addLog('warn', 'Proxy returned invalid JSON', parseError);
+                    console.warn('Proxy returned invalid JSON', parseError);
                     continue; // Tenta próximo proxy
                 }
             }
         } catch (error) {
-            logService.addLog('warn', `Proxy failed (${proxyUrl}):`, error);
+            console.warn(`Proxy failed (${proxyUrl}):`, error);
             lastError = error;
         }
         
         // Pequeno delay antes de tentar o próximo
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 500));
     }
     
     throw lastError || new Error('All proxies failed');
@@ -139,16 +131,16 @@ const fetchBackendData = async (endpoint: string) => {
         
         // Mapeamento de Endpoints para URL Real do SofaScore
         if (endpoint === '/live') {
-            directUrl = 'https://api.sofascore.app/api/v1/sport/football/events/live';
+            directUrl = 'https://api.sofascore.com/api/v1/sport/football/events/live';
         } else if (endpoint.startsWith('/lineups/')) {
             const id = endpoint.split('/')[2];
-            directUrl = `https://api.sofascore.app/api/v1/event/${id}/lineups`;
+            directUrl = `https://api.sofascore.com/api/v1/event/${id}/lineups`;
         } else if (endpoint.startsWith('/player/')) {
             // /player/:eventId/:playerId -> /event/:eventId/player/:playerId/statistics
             const parts = endpoint.split('/');
             const eventId = parts[2];
             const playerId = parts[3];
-            directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/statistics`;
+            directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/statistics`;
         } else if (endpoint.startsWith('/heatmap/')) {
              // /heatmap/:eventId/:playerId -> /event/:eventId/player/:playerId/heatmap
              const parts = endpoint.split('/');
@@ -156,94 +148,75 @@ const fetchBackendData = async (endpoint: string) => {
              const playerId = parts[3];
              // Check if it's /data
              if (parts[4] === 'data') {
-                 directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/heatmap`;
+                 directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/heatmap`;
              } else {
-                 directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/heatmap`;
+                 directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/heatmap`;
              }
         } else if (endpoint.startsWith('/sport/football/scheduled-events/')) {
             const date = endpoint.split('/').pop();
-            directUrl = `https://api.sofascore.app/api/v1/sport/football/scheduled-events/${date}`;
+            directUrl = `https://api.sofascore.com/api/v1/sport/football/scheduled-events/${date}`;
         } else {
             // Default fallback
-            directUrl = `https://api.sofascore.app/api/v1${endpoint}`;
+            directUrl = `https://api.sofascore.com/api/v1${endpoint}`;
         }
 
         // Append timestamp
         directUrl += (directUrl.includes('?') ? '&' : '?') + timestamp;
 
-        logService.addLog('info', `Native Fetch: ${directUrl}`);
+        console.log(`Native Fetch: ${directUrl}`);
 
-        // Atualizado User-Agent para uma versão mais recente
-        const mobileUA = 'Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36';
+        // Tenta simular o App Nativo do SofaScore (menos restrições que a Web)
+        const mobileUA = 'SofaScore/6.1.5 (Android 13; SM-S918B; en)';
         
-        const doRequest = async (retries = 3, delay = 1000, useWebHeaders = true): Promise<any> => {
+        const doRequest = async (retries = 3, delay = 1000, useWebHeaders = false): Promise<any> => {
             try {
                 const headers: any = {
                     'Cache-Control': 'no-cache',
-                    'Accept': '*/*',
-                    'User-Agent': mobileUA,
-                    'Connection': 'keep-alive',
-                    'Origin': 'https://www.sofascore.com',
-                    'Referer': 'https://www.sofascore.com/'
+                    'Accept': 'application/json, text/plain, */*',
+                    'User-Agent': useWebHeaders ? 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36' : mobileUA,
+                    'Connection': 'keep-alive'
                 };
 
-                logService.addLog('info', `Executing Native Request to: ${directUrl}`);
-                logService.addLog('info', `Headers:`, JSON.stringify(headers));
+                // Web headers só se falhar o modo nativo ou se for fallback
+                if (useWebHeaders) {
+                    headers['Origin'] = 'https://www.sofascore.com';
+                    headers['Referer'] = 'https://www.sofascore.com/';
+                }
 
                 const response = await CapacitorHttp.get({
                     url: directUrl,
                     headers: headers
                 });
 
-                logService.addLog('info', `Native Response Status: ${response.status}`);
-                logService.addLog('info', `Native Response Headers:`, JSON.stringify(response.headers));
-                logService.addLog('info', `Native Response Object Keys:`, Object.keys(response));
-                
-                // Se a resposta estiver vazia, trata como erro para forçar fallback
-                if (!response.data || (typeof response.data === 'string' && response.data.trim() === '')) {
-                    logService.addLog('warn', 'Native Response is empty, forcing fallback');
-                    throw new Error('Empty response from native fetch');
-                }
-
-                logService.addLog('info', `Native Response Data Preview:`, typeof response.data === 'string' ? response.data.substring(0, 1000) : JSON.stringify(response.data).substring(0, 1000));
-                
                 if (response.status === 404) return null;
                 
                 // Se for bloqueio (403) ou erro de servidor (5xx), tenta novamente
                 if (response.status === 403 || response.status >= 500) {
-                    logService.addLog('warn', `Request blocked or failed (${response.status})`);
+                    console.warn(`Request blocked or failed (${response.status})`);
                     if (retries > 0) {
                         // Tenta alternar estratégia de headers na última tentativa
                         const nextUseWeb = retries === 1 ? !useWebHeaders : useWebHeaders;
-                        logService.addLog('warn', `Retrying in ${delay}ms... (WebHeaders: ${nextUseWeb})`);
+                        console.warn(`Retrying in ${delay}ms... (WebHeaders: ${nextUseWeb})`);
                         await new Promise(resolve => setTimeout(resolve, delay));
                         return doRequest(retries - 1, delay * 2, nextUseWeb);
                     }
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
-                if (response.status >= 400) {
-                    logService.addLog('error', `Native Request failed with status ${response.status}:`, response.data);
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
+                if (response.status >= 400) throw new Error(`HTTP error! status: ${response.status}`);
                 
                 let data = response.data;
                 if (typeof data === 'string') {
                     try {
                         data = JSON.parse(data);
                     } catch (e) {
-                        logService.addLog('error', 'Error parsing native response', {
-                            error: e,
-                            rawData: data.substring(0, 1000) // Loga o conteúdo bruto para debug
-                        });
-                        return null; // Retorna null se não conseguir parsear
+                        console.error('Error parsing native response', e);
                     }
                 }
                 return data;
             } catch (err) {
-                logService.addLog('error', 'Native Request Exception:', err);
                 if (retries > 0) {
-                     logService.addLog('warn', `Network error, retrying in ${delay}ms...`, err);
+                     console.warn(`Network error, retrying in ${delay}ms...`, err);
                      await new Promise(resolve => setTimeout(resolve, delay));
                      return doRequest(retries - 1, delay * 2, useWebHeaders);
                 }
@@ -254,12 +227,12 @@ const fetchBackendData = async (endpoint: string) => {
         try {
             return await doRequest();
         } catch (nativeError) {
-            logService.addLog('error', 'Native fetch failed after retries, falling back to Public Proxies', nativeError);
+            console.error('Native fetch failed after retries, falling back to Public Proxies', nativeError);
             // Fallback to Proxy Rotation
             try {
                 return await fetchWithProxies(directUrl);
             } catch (proxyError) {
-                logService.addLog('error', 'All proxies failed in Native Fallback', proxyError);
+                console.error('All proxies failed in Native Fallback', proxyError);
                 return null;
             }
         }
@@ -269,7 +242,7 @@ const fetchBackendData = async (endpoint: string) => {
         // Em ambiente de desenvolvimento/web, usamos o servidor local (server.ts)
         // que atua como proxy para o SofaScore.
         const url = `${endpoint}${endpoint.includes('?') ? '&' : '?'}${timestamp}`;
-        logService.addLog('info', `Web Fetch (Local Proxy): ${url}`);
+        console.log(`Web Fetch (Local Proxy): ${url}`);
         
         try {
             const response = await fetch(url);
@@ -277,10 +250,9 @@ const fetchBackendData = async (endpoint: string) => {
                 if (response.status === 404) return null;
                 throw new Error(`Local proxy error: ${response.status}`);
             }
-            if (response.status === 204) return null;
             return await response.json();
         } catch (error) {
-            logService.addLog('error', 'Local proxy failed in Web Mode', error);
+            console.error('Local proxy failed in Web Mode', error);
             return null;
         }
     }
@@ -325,12 +297,12 @@ export const getLiveGames = async (): Promise<Game[]> => {
   try {
     data = await fetchBackendData('/live');
   } catch (error) {
-    logService.addLog('warn', 'Error fetching live games endpoint, trying fallback...', error);
+    console.warn('Error fetching live games endpoint, trying fallback...', error);
   }
     
   // Fallback: Se /live falhar ou vier vazio, tenta buscar jogos do dia e filtrar os ao vivo
   if (!data || !data.events || data.events.length === 0) {
-      logService.addLog('warn', 'Live endpoint empty or failed, trying scheduled events fallback...');
+      console.warn('Live endpoint empty or failed, trying scheduled events fallback...');
       try {
           const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
           const scheduledData = await fetchBackendData(`/sport/football/scheduled-events/${today}`);
@@ -343,7 +315,7 @@ export const getLiveGames = async (): Promise<Game[]> => {
               }
           }
       } catch (fallbackError) {
-          logService.addLog('error', 'Fallback also failed', fallbackError);
+          console.error('Fallback also failed', fallbackError);
       }
   }
   
@@ -451,7 +423,7 @@ export const getGamePlayers = async (eventId: number): Promise<GameLineups | nul
       away: processTeam(data.away)
     };
   } catch (error) {
-    logService.addLog('error', 'Error fetching lineups', error);
+    console.error('Error fetching lineups', error);
     return null;
   }
 };

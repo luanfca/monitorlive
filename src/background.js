@@ -41,12 +41,12 @@ addEventListener('checkPlayers', async (resolve, reject, args) => {
             try {
                 // Fetch lineups from backend
                 // Use absolute URL for background runner as it has no base
-                const response = await fetch(`https://api.sofascore.app/api/v1/event/${eventId}/lineups`, {
+                const response = await fetch(`https://api.sofascore.com/api/v1/event/${eventId}/lineups`, {
                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                        'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36',
                         'Referer': 'https://www.sofascore.com/',
                         'Origin': 'https://www.sofascore.com',
-                        'Accept': '*/*'
+                        'Accept': 'application/json, text/plain, */*'
                     }
                 });
                 if (!response.ok) continue;

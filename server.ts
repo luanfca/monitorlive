@@ -46,8 +46,6 @@ async function startServer() {
         headers
       });
 
-      console.log(`SofaScore API response status: ${response.status} for ${url}`);
-
       if (!response.ok) {
         if (response.status === 404) {
             return res.status(404).json({ error: 'Not found' });
@@ -61,16 +59,13 @@ async function startServer() {
         res.setHeader('Content-Type', contentType);
       }
 
-      // Buffer the response to check if it's empty
-      const buffer = await response.arrayBuffer();
-      console.log(`Response size: ${buffer.byteLength} bytes`);
-      
-      if (buffer.byteLength === 0) {
-          console.warn(`Empty response from ${url}`);
-          return res.status(204).end();
+      if (response.body) {
+          // @ts-ignore
+          const nodeStream = Readable.fromWeb(response.body);
+          nodeStream.pipe(res);
+      } else {
+          res.end();
       }
-
-      res.send(Buffer.from(buffer));
     } catch (error) {
       console.error('Proxy error:', error);
       res.status(500).json({ error: 'Proxy error' });
@@ -80,12 +75,12 @@ async function startServer() {
   // Live events
   app.get('/live', async (req, res) => {
     // Correct endpoint for live events
-    await fetchSofa(`https://api.sofascore.app/api/v1/sport/football/events/live`, res, req);
+    await fetchSofa(`https://api.sofascore.com/api/v1/sport/football/events/live`, res, req);
   });
 
   // Lineups
   app.get('/lineups/:id', async (req, res) => {
-    await fetchSofa(`https://api.sofascore.app/api/v1/event/${req.params.id}/lineups`, res, req);
+    await fetchSofa(`https://api.sofascore.com/api/v1/event/${req.params.id}/lineups`, res, req);
   });
 
   // Player stats
@@ -94,7 +89,7 @@ async function startServer() {
     // Sometimes stats are under /event/:id/player/:playerId/statistics
     // Or just /player/:playerId/events/last/0 (but we need specific event)
     // Let's try /event/:eventId/player/:playerId/statistics
-    await fetchSofa(`https://api.sofascore.app/api/v1/event/${req.params.eventId}/player/${req.params.playerId}/statistics`, res, req);
+    await fetchSofa(`https://api.sofascore.com/api/v1/event/${req.params.eventId}/player/${req.params.playerId}/statistics`, res, req);
   });
 
   // Player image
@@ -104,17 +99,17 @@ async function startServer() {
 
   // Heatmap
   app.get('/heatmap/:eventId/:playerId', async (req, res) => {
-    await fetchSofa(`https://api.sofascore.app/api/v1/event/${req.params.eventId}/player/${req.params.playerId}/heatmap`, res, req);
+    await fetchSofa(`https://api.sofascore.com/api/v1/event/${req.params.eventId}/player/${req.params.playerId}/heatmap`, res, req);
   });
   
   // Heatmap Data (Points)
   app.get('/heatmap/:eventId/:playerId/data', async (req, res) => {
-      await fetchSofa(`https://api.sofascore.app/api/v1/event/${req.params.eventId}/player/${req.params.playerId}/heatmap`, res, req);
+      await fetchSofa(`https://api.sofascore.com/api/v1/event/${req.params.eventId}/player/${req.params.playerId}/heatmap`, res, req);
   });
 
   // Scheduled events (Fallback for live)
   app.get('/sport/football/scheduled-events/:date', async (req, res) => {
-    await fetchSofa(`https://api.sofascore.app/api/v1/sport/football/scheduled-events/${req.params.date}`, res, req);
+    await fetchSofa(`https://api.sofascore.com/api/v1/sport/football/scheduled-events/${req.params.date}`, res, req);
   });
 
 
