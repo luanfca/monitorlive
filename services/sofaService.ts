@@ -196,13 +196,8 @@ const fetchBackendData = async (endpoint: string) => {
                 });
 
                 logService.addLog('info', `Native Response Status: ${response.status}`);
+                logService.addLog('info', `Native Response Object Keys:`, Object.keys(response));
                 
-                // Verifica se a resposta está vazia
-                if (!response.data || (typeof response.data === 'string' && response.data.trim() === '')) {
-                    logService.addLog('warn', 'Native Response is empty');
-                    return null;
-                }
-
                 logService.addLog('info', `Native Response Data Preview:`, typeof response.data === 'string' ? response.data.substring(0, 1000) : JSON.stringify(response.data).substring(0, 1000));
                 
                 if (response.status === 404) return null;
