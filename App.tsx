@@ -197,7 +197,14 @@ const GameCard = React.memo(({ game, onClick, isMonitored, onToggleMonitor }: Ga
 });
 
 const App: React.FC = () => {
-  const messaging = getMessaging();
+  let messaging: any = null;
+  try {
+    if (!Capacitor.isNativePlatform()) {
+      messaging = getMessaging();
+    }
+  } catch (e) {
+    console.warn('Firebase messaging not supported', e);
+  }
 
   // --- Hooks (devem ser chamados incondicionalmente) ---
   const [fcmToken, setFcmToken] = useState<string | null>(null);

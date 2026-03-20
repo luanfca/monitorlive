@@ -9,14 +9,6 @@
 		"CapacitorHttp": {
 			"enabled": true
 		},
-		"BackgroundRunner": {
-			"label": "com.livematch.tracker.background",
-			"src": "background.js",
-			"event": "checkPlayers",
-			"repeat": true,
-			"interval": 1,
-			"autoStart": true
-		},
 		"LocalNotifications": {
 			"smallIcon": "ic_stat_icon_config_sample",
 			"iconColor": "#488AFF",

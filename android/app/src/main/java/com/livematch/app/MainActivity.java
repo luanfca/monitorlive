@@ -1,4 +1,4 @@
-package com.livematch.tracker;
+package com.livematch.app;
 
 import com.getcapacitor.BridgeActivity;
 

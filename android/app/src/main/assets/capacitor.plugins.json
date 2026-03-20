@@ -4,10 +4,6 @@
 		"classpath": "com.capacitorjs.plugins.app.AppPlugin"
 	},
 	{
-		"pkg": "@capacitor/background-runner",
-		"classpath": "io.ionic.backgroundrunner.plugin.BackgroundRunnerPlugin"
-	},
-	{
 		"pkg": "@capacitor/local-notifications",
 		"classpath": "com.capacitorjs.plugins.localnotifications.LocalNotificationsPlugin"
 	},
