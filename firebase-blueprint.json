@@ -1,0 +1,37 @@
+{
+  "entities": {
+    "UserSubscription": {
+      "title": "UserSubscription",
+      "description": "Tracks which games a user is following and their alert preferences.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The user's ID." },
+        "gameId": { "type": "string", "description": "The ID of the game being followed." },
+        "alerts": { "type": "object", "description": "Map of enabled alert types." }
+      },
+      "required": ["userId", "gameId"]
+    },
+    "GameNotification": {
+      "title": "GameNotification",
+      "description": "Stores notifications for a specific game.",
+      "type": "object",
+      "properties": {
+        "gameId": { "type": "string", "description": "The ID of the game." },
+        "message": { "type": "string", "description": "The notification message." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the notification occurred." },
+        "type": { "type": "string", "description": "The type of notification (e.g., goal, card)." }
+      },
+      "required": ["gameId", "message", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/subscriptions/{subscriptionId}": {
+      "schema": { "$ref": "UserSubscription" },
+      "description": "Collection of user game subscriptions."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "GameNotification" },
+      "description": "Collection of game notifications."
+    }
+  }
+}

@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: subscriptions
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required) - ID of the user
+    //   - gameId: string (required) - ID of the game
+    //   - alerts: map (optional) - Alert preferences
+    //
+    // Collection: notifications
+    // Document ID: auto-generated
+    // Fields:
+    //   - gameId: string (required) - ID of the game
+    //   - message: string (required) - Notification message
+    //   - timestamp: timestamp (required) - When it occurred
+    //   - type: string (required) - Type of notification
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+       return request.auth != null;
+    }
+
+    function isOwner(userId) {
+       return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasRequiredFields(fields) {
+       return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /subscriptions/{subscriptionId} {
+      allow read: if isAuthenticated() && isOwner(request.auth.uid);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId) && hasRequiredFields(['userId', 'gameId']);
+      allow update: if isAuthenticated() && isOwner(resource.data.userId) && isOwner(request.resource.data.userId);
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    }
+
+    match /notifications/{notificationId} {
+      // Notifications are generally read-only for users
+      allow read: if true;
+      // Only system/server should write notifications
+      allow write: if false;
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "591993571890",
+    "project_id": "livematch-290b9",
+    "storage_bucket": "livematch-290b9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:591993571890:android:e376d71aa9caeaa80e0a2b",
+        "android_client_info": {
+          "package_name": "com.livematch.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDCEkBFYNknXaTs5j461CWIL6Pkh8EWW2Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
