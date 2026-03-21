@@ -193,9 +193,6 @@ const fetchBackendData = async (endpoint: string) => {
             directUrl = `https://api.sofascore.app/api/v1${endpoint}`;
         }
 
-        // Append timestamp
-        directUrl += (directUrl.includes('?') ? '&' : '?') + timestamp;
-
         logService.addLog('info', `Native Fetch: ${directUrl}`);
 
         // Atualizado User-Agent para uma versão mais recente
@@ -226,6 +223,13 @@ const fetchBackendData = async (endpoint: string) => {
                     });
                     responseStatus = response.status;
                     data = response.data;
+                    if (typeof data === 'string' && (data.trim().startsWith('{') || data.trim().startsWith('['))) {
+                        try {
+                            data = JSON.parse(data);
+                        } catch (e) {
+                            logService.addLog('warn', 'Failed to parse CapacitorHttp string data', e);
+                        }
+                    }
                 } else {
                     const response = await fetch(directUrl, {
                         method: 'GET',
