@@ -42,10 +42,17 @@ export const startMonitor = () => {
             for (const eventId of eventIds) {
                 try {
                     const response = await fetch(`https://api.sofascore.app/api/v1/event/${eventId}/lineups`, {
-                        headers: { 'User-Agent': 'Mozilla/5.0' }
+                        headers: { 
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                            'Referer': 'https://www.sofascore.com/',
+                            'Accept': 'application/json, text/plain, */*'
+                        }
                     });
                     if (response.ok) {
-                        eventLineups[eventId] = await response.json();
+                        const text = await response.text();
+                        if (text) {
+                            eventLineups[eventId] = JSON.parse(text);
+                        }
                     }
                 } catch (e) {
                     console.error(`Erro ao buscar lineups do evento ${eventId}:`, e);
