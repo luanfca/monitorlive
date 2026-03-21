@@ -4,11 +4,34 @@ import { CapacitorHttp } from '@capacitor/core';
 import { Game, GameLineups, GamePlayer, PlayerStats } from '../types';
 import { logService } from './logService';
 
+// Helper para detectar plataforma nativa (mesmo em Web Workers)
+const isNative = (): boolean => {
+    try {
+        if (Capacitor && Capacitor.isNativePlatform()) return true;
+    } catch (e) {}
+    
+    // Fallback para Web Workers no Capacitor
+    if (typeof self !== 'undefined' && self.location) {
+        const origin = self.location.origin;
+        if (origin.includes('localhost') && (origin.startsWith('http:') || origin.startsWith('capacitor:'))) {
+            // Em produção web, a origem seria o domínio real. localhost no celular indica Capacitor.
+            // Para evitar falso positivo no dev server (localhost:5173), verificamos a porta.
+            if (!self.location.port || self.location.port === '') {
+                return true;
+            }
+        }
+    }
+    return false;
+};
+
 // Configuração da Base URL (Prioridade para Variável de Ambiente, Fallback para Produção)
 // Usamos uma referência segura para o env para garantir acesso correto no Vite
 const env = (import.meta as any).env || {};
-// Use relative path to use the local proxy server
-export const API_BASE = '';
+// Use o Shared App URL como proxy para evitar problemas de CORS no Web Worker no Android.
+// No ambiente Web (Preview/Browser), use o caminho relativo '' para bater no próprio servidor local.
+export const API_BASE = isNative() 
+    ? (env.VITE_API_BASE || 'https://ais-pre-sbbbqotd5lm2damzkmizak-17720903248.us-west2.run.app')
+    : '';
 
 // Debug para verificar conexão em produção
 console.log('BACKEND URL:', API_BASE);
@@ -21,7 +44,7 @@ export const normalizeString = (str: string): string => {
 
 // Helper centralizado para imagens de jogadores via Backend
 export const getPlayerImageUrl = (playerId: number): string => {
-  if (Capacitor.isNativePlatform()) {
+  if (isNative()) {
       return `https://api.sofascore.app/api/v1/player/${playerId}/image`;
   }
   return `${API_BASE}/player-image/${playerId}`;
@@ -29,7 +52,7 @@ export const getPlayerImageUrl = (playerId: number): string => {
 
 // Helper para obter a URL do mapa de calor via Backend
 export const getPlayerHeatmapUrl = (eventId: number, playerId: number): string => {
-  if (Capacitor.isNativePlatform()) {
+  if (isNative()) {
       // Note: Heatmap images might require headers, so this direct URL might not work in <img> tag
       // unless SofaScore allows it. If not, we might need to fetch blob and convert to base64.
       // For now, let's try direct URL or fallback to our proxy if we were using one.
@@ -134,7 +157,9 @@ const fetchBackendData = async (endpoint: string) => {
     const timestamp = `t=${Date.now()}`;
     
     // --- LÓGICA NATIVA (APK/IOS) ---
-    if (Capacitor.isNativePlatform()) {
+    // Se for nativo E tiver CapacitorHttp (Main Thread), usa chamada direta.
+    // Se for nativo mas NÃO tiver CapacitorHttp (Web Worker), cai para a lógica Web (Proxy).
+    if (isNative() && typeof CapacitorHttp !== 'undefined' && CapacitorHttp.get) {
         let directUrl = '';
         
         // Mapeamento de Endpoints para URL Real do SofaScore
@@ -190,15 +215,38 @@ const fetchBackendData = async (endpoint: string) => {
                 logService.addLog('info', `Executing Native Request to: ${directUrl}`);
                 logService.addLog('info', `Headers:`, JSON.stringify(headers));
 
-                // Tenta usar fetch nativo (se disponível no WebView) em vez de CapacitorHttp
-                const response = await fetch(directUrl, {
-                    method: 'GET',
-                    headers: headers
-                });
+                // Usa CapacitorHttp.get diretamente se disponível (Main Thread), senão usa fetch (Web Worker)
+                let responseStatus;
+                let data;
 
-                logService.addLog('info', `Native Response Status: ${response.status}`);
+                if (typeof CapacitorHttp !== 'undefined' && CapacitorHttp.get) {
+                    const response = await CapacitorHttp.get({
+                        url: directUrl,
+                        headers: headers
+                    });
+                    responseStatus = response.status;
+                    data = response.data;
+                } else {
+                    const response = await fetch(directUrl, {
+                        method: 'GET',
+                        headers: headers
+                    });
+                    responseStatus = response.status;
+                    if (responseStatus >= 200 && responseStatus < 300) {
+                        const text = await response.text();
+                        if (text) {
+                            data = JSON.parse(text);
+                        } else {
+                            data = null;
+                        }
+                    }
+                }
+
+                logService.addLog('info', `Native Response Status: ${responseStatus}`);
                 
-                const data = await response.json();
+                if (responseStatus < 200 || responseStatus >= 300) {
+                    throw new Error(`HTTP Error: ${responseStatus}`);
+                }
                 
                 logService.addLog('info', `Native Response Data Preview:`, JSON.stringify(data).substring(0, 1000));
                 
@@ -228,11 +276,11 @@ const fetchBackendData = async (endpoint: string) => {
         }
 
     } else {
-        // --- LÓGICA WEB (USANDO PROXY LOCAL) ---
+        // --- LÓGICA WEB (USANDO PROXY LOCAL OU SHARED APP URL) ---
         // Em ambiente de desenvolvimento/web, usamos o servidor local (server.ts)
-        // que atua como proxy para o SofaScore.
-        const url = `${endpoint}${endpoint.includes('?') ? '&' : '?'}${timestamp}`;
-        logService.addLog('info', `Web Fetch (Local Proxy): ${url}`);
+        // ou o Shared App URL que atua como proxy para o SofaScore.
+        const url = `${API_BASE}${endpoint}${endpoint.includes('?') ? '&' : '?'}${timestamp}`;
+        logService.addLog('info', `Web Fetch (Proxy): ${url}`);
         
         try {
             const response = await fetch(url);
@@ -241,7 +289,10 @@ const fetchBackendData = async (endpoint: string) => {
                 throw new Error(`Local proxy error: ${response.status}`);
             }
             if (response.status === 204) return null;
-            return await response.json();
+            
+            const text = await response.text();
+            if (!text) return null;
+            return JSON.parse(text);
         } catch (error) {
             logService.addLog('error', 'Local proxy failed in Web Mode', error);
             return null;
