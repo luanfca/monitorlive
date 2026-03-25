@@ -12,7 +12,20 @@
           "package_name": "com.livematch.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "591993571890-75g6joqgp7regajjr7r537qnk5e2m3dc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.livematch.app",
+            "certificate_hash": "831b5b1108c9eb57c1e734856f2fd25bf71718e7"
+          }
+        },
+        {
+          "client_id": "591993571890-39stkr8svsvngc9ohk5erdo43k3637ft.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDCEkBFYNknXaTs5j461CWIL6Pkh8EWW2Y"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "591993571890-39stkr8svsvngc9ohk5erdo43k3637ft.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
