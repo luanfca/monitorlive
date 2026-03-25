@@ -11,8 +11,8 @@ import { Game, MonitoredPlayer, LogEntry, PlayerStats, GameLineups, GamePlayer }
 import * as api from './services/sofaService';
 import { getMessaging, getToken, onMessage, deleteToken } from 'firebase/messaging';
 import { auth, db } from './services/firebase';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { collection, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore';
+import { onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { collection, onSnapshot, query, where, orderBy, limit, doc, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import SoccerField from './components/SoccerField';
 
 enum OperationType {
@@ -139,22 +139,22 @@ const GameCard = React.memo(({ game, onClick, isMonitored, onToggleMonitor }: Ga
         role="button"
         tabIndex={0}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(game.id); }}
-        className="w-full bg-zinc-900/60 backdrop-blur-md border border-zinc-800/80 p-5 rounded-[1.5rem] hover:border-emerald-500/40 transition-all active:scale-[0.98] text-left group shadow-lg relative overflow-hidden flex flex-col h-full cursor-pointer"
+        className="w-full bg-[#1e1e1e] border border-white/5 p-4 rounded-2xl hover:border-blue-500/40 transition-all active:scale-[0.98] text-left group relative overflow-hidden flex flex-col h-full cursor-pointer"
     >
         <button 
             onClick={(e) => { e.stopPropagation(); onToggleMonitor(game); }}
-            className={`absolute top-4 right-4 z-20 p-2 rounded-full ${isMonitored ? 'bg-emerald-500' : 'bg-zinc-800'}`}
+            className={`absolute top-3 right-3 z-20 p-2 rounded-full transition-colors ${isMonitored ? 'bg-blue-600' : 'bg-[#2a2a2a] hover:bg-[#333]'}`}
         >
             <Bell size={16} className={isMonitored ? 'text-white' : 'text-zinc-400'} />
         </button>
         <div className="flex-1 z-10 relative w-full">
-            <div className="flex justify-between items-start mb-4">
-                <span className="text-[10px] uppercase text-zinc-400 font-black bg-black/40 px-2 py-1 rounded-md border border-white/5 max-w-[70%] truncate tracking-wider">{game.tournament}</span>
-                <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/10">
+            <div className="flex justify-between items-start mb-3">
+                <span className="text-[11px] text-zinc-400 font-medium px-2 py-1 rounded-md bg-[#2a2a2a] max-w-[70%] truncate">{game.tournament}</span>
+                <div className="flex items-center gap-1.5 bg-blue-500/10 px-2 py-1 rounded-md">
                     {(typeof game.minute === 'number' || game.status === 'Live') && (
-                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+                        <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
                     )}
-                    <span className="text-[10px] text-emerald-400 font-mono font-black uppercase tracking-tight leading-none">
+                    <span className="text-[11px] text-blue-400 font-medium">
                         {(() => {
                             const isHalftime = game.statusCode === 31 || game.status === 'Halftime' || game.status === 'HT' || game.status === 'Intervalo' || game.status === 'Break' || game.status === 'Half time';
                             const isEnded = game.statusCode === 100 || game.statusCode === 106 || game.statusCode === 120 || game.status === 'Ended' || game.status === 'FT' || game.status === 'Fim' || game.status === 'Full time';
@@ -170,19 +170,18 @@ const GameCard = React.memo(({ game, onClick, isMonitored, onToggleMonitor }: Ga
             </div>
             
             <div className="flex items-center justify-between gap-4">
-                <div className="flex-1 space-y-3 w-full">
+                <div className="flex-1 space-y-2 w-full">
                     <div className="flex justify-between items-center">
-                        <div className="font-bold text-zinc-100 truncate text-sm uppercase tracking-tight max-w-[70%]">{game.homeTeam.name}</div>
-                        <div className="font-mono text-xl font-black text-white">{game.homeTeam.score ?? 0}</div>
+                        <div className="font-medium text-zinc-100 truncate text-sm max-w-[80%]">{game.homeTeam.name}</div>
+                        <div className="font-bold text-lg text-white">{game.homeTeam.score ?? 0}</div>
                     </div>
                     <div className="flex justify-between items-center">
-                        <div className="font-bold text-zinc-100 truncate text-sm uppercase tracking-tight max-w-[70%]">{game.awayTeam.name}</div>
-                        <div className="font-mono text-xl font-black text-white">{game.awayTeam.score ?? 0}</div>
+                        <div className="font-medium text-zinc-100 truncate text-sm max-w-[80%]">{game.awayTeam.name}</div>
+                        <div className="font-bold text-lg text-white">{game.awayTeam.score ?? 0}</div>
                     </div>
                 </div>
             </div>
         </div>
-        <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/5 blur-[50px] rounded-full pointer-events-none" />
     </div>
   );
 }, (prevProps, nextProps) => {
@@ -209,6 +208,24 @@ const App: React.FC = () => {
   // --- Hooks (devem ser chamados incondicionalmente) ---
   const [fcmToken, setFcmToken] = useState<string | null>(null);
 
+  const [toasts, setToasts] = useState<{id: string, msg: string, type: string}[]>([]);
+  const addToast = useCallback((msg: string, type: string) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setToasts(prev => [...prev, {id, msg, type}]);
+    setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== id)); }, 4000);
+  }, []);
+
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
+    const entry: LogEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      time: new Date().toLocaleTimeString('pt-BR'),
+      message,
+      type
+    };
+    setLogs(prev => [entry, ...prev].slice(0, 50));
+  }, []);
+
   // 1. Efeitos de inicialização
   useEffect(() => {
       const requestPermission = async () => {
@@ -234,8 +251,8 @@ const App: React.FC = () => {
 
                   PushNotifications.addListener('pushNotificationReceived', (notification) => {
                       console.log('Push received: ', notification);
-                      // addLog will be called by the onSnapshot listener if the app is open, 
-                      // but we can also log it here if needed.
+                      addToast(notification.title + ': ' + notification.body, 'info');
+                      addLog('Notificação recebida: ' + notification.body, 'info');
                   });
 
                   PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
@@ -270,14 +287,25 @@ const App: React.FC = () => {
   const [updateProgress, setUpdateProgress] = useState(0);
   const [latestCommitUrl, setLatestCommitUrl] = useState('');
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
-  const [logs, setLogs] = useState<LogEntry[]>(() => {
-      try {
-          const saved = localStorage.getItem('match_logs');
-          return saved ? JSON.parse(saved) : [];
-      } catch (e) { return []; }
-  });
-  const [toasts, setToasts] = useState<{id: string, msg: string, type: string}[]>([]);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        setIsAuthReady(true);
+      } else {
+        try {
+          await signInAnonymously(auth);
+        } catch (error) {
+          console.error("Erro no login anônimo", error);
+          setIsAuthReady(true);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   const [updatedPlayersIds, setUpdatedPlayersIds] = useState<Set<number>>(new Set());
   const [liveGames, setLiveGames] = useState<Game[]>([]);
   const [monitoredGames, setMonitoredGames] = useState<Game[]>(() => {
@@ -286,6 +314,12 @@ const App: React.FC = () => {
           return saved ? JSON.parse(saved) : [];
       } catch (e) { return []; }
   });
+
+  const [players, setPlayers] = useState<MonitoredPlayer[]>([]);
+  const playersRef = useRef<MonitoredPlayer[]>(players);
+
+
+
   const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
   const [lineups, setLineups] = useState<GameLineups | null>(null);
   const [isLoadingGames, setIsLoadingGames] = useState(false);
@@ -296,9 +330,7 @@ const App: React.FC = () => {
   const [lastSync, setLastSync] = useState<string>('Aguardando primeira varredura...');
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const [selectedPlayerDetails, setSelectedPlayerDetails] = useState<MonitoredPlayer | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const workerRef = useRef<Worker | null>(null);
 
   const [activeTab, setActiveTab] = useState<'monitor' | 'search' | 'logs'>('monitor');
   const [isMonitoring, setIsMonitoring] = useState(() => localStorage.getItem('is_monitoring') === 'true');
@@ -311,23 +343,35 @@ const App: React.FC = () => {
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
     'Notification' in window ? Notification.permission : 'denied'
   );
-  const [players, setPlayers] = useState<MonitoredPlayer[]>(() => {
-    try {
-        const saved = localStorage.getItem('monitored_players');
-        return (saved && saved !== '') ? JSON.parse(saved) : [];
-    } catch (e) { return []; }
-  });
-  const playersRef = useRef<MonitoredPlayer[]>(players);
+
+  useEffect(() => {
+    if (user) {
+      const q = query(collection(db, `users/${user.uid}/monitoredPlayers`));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const loadedPlayers = snapshot.docs.map(doc => doc.data() as MonitoredPlayer);
+        setPlayers(loadedPlayers);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/monitoredPlayers`);
+      });
+      return () => unsubscribe();
+    } else {
+      setPlayers([]);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (fcmToken) {
       fetch('/api/update-monitor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: fcmToken, players })
+        body: JSON.stringify({ 
+            token: fcmToken, 
+            players: isMonitoring ? players : [],
+            userId: user?.uid 
+        })
       }).catch(e => console.error('Erro ao sincronizar com backend:', e));
     }
-  }, [fcmToken, players]);
+  }, [fcmToken, players, isMonitoring, user]);
 
   // 3. Efeitos de autenticação e outros
   useEffect(() => {
@@ -360,37 +404,6 @@ const App: React.FC = () => {
         checkUpdate();
     }
   }, []);
-
-  // Force update when returning to app
-  const forceUpdate = useCallback(async () => {
-    if (isMonitoring && workerRef.current) {
-        workerRef.current.postMessage({ type: 'FORCE_CHECK' });
-        addLog('Retomando monitoramento...', 'info');
-    }
-  }, [isMonitoring]);
-
-  useEffect(() => {
-    // Browser visibility
-    const handleVisibility = () => {
-        if (document.visibilityState === 'visible') forceUpdate();
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    // Capacitor App State
-    let appStateListener: any;
-    if (Capacitor.isNativePlatform()) {
-        appStateListener = CapApp.addListener('appStateChange', async ({ isActive }) => {
-            if (isActive) {
-                forceUpdate();
-            }
-        });
-    }
-
-    return () => {
-        document.removeEventListener('visibilitychange', handleVisibility);
-        if (appStateListener) appStateListener.remove();
-    };
-  }, [forceUpdate]);
 
   // --- Renderização condicional (após todos os hooks) ---
 
@@ -427,7 +440,12 @@ const App: React.FC = () => {
     const notificationsRef = collection(db, 'notifications');
     const q = query(notificationsRef, orderBy('timestamp', 'desc'), limit(5));
 
+    let isInitialSnapshot = true;
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (isInitialSnapshot) {
+        isInitialSnapshot = false;
+        return;
+      }
       snapshot.docChanges().forEach((change) => {
         if (change.type === 'added') {
           const data = change.doc.data();
@@ -449,24 +467,8 @@ const App: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, [isAuthReady]);
+  }, [isAuthReady, addLog]);
   const isWorkerUpdate = useRef(false);
-
-  const addToast = (msg: string, type: string) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    setToasts(prev => [...prev, {id, msg, type}]);
-    setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== id)); }, 4000);
-  };
-
-  const addLog = (message: string, type: LogEntry['type'] = 'info') => {
-    const entry: LogEntry = {
-      id: Math.random().toString(36).substr(2, 9),
-      time: new Date().toLocaleTimeString('pt-BR'),
-      message,
-      type
-    };
-    setLogs(prev => [entry, ...prev].slice(0, 50));
-  };
 
   useEffect(() => {
       addLog('Iniciando LiveMatch v2.1 (Anti-Bloqueio Ativado)', 'info');
@@ -477,7 +479,7 @@ const App: React.FC = () => {
       }
   }, []);
 
-  const sendNotification = async (title: string, body: string) => {
+  const sendNotification = useCallback(async (title: string, body: string) => {
     // 1. Android/iOS Nativo (Capacitor)
     if (Capacitor.isNativePlatform()) {
         try {
@@ -526,7 +528,7 @@ const App: React.FC = () => {
        const n = new Notification(title, options);
        n.onclick = () => window.focus();
     } catch (e) {}
-  };
+  }, [notifPermission]);
 
 
   // Handle updates from worker or main thread
@@ -629,12 +631,12 @@ const App: React.FC = () => {
             
             setTimeout(() => { isWorkerUpdate.current = false; }, 100);
         }
-  }, [intervalTime, sendNotification]);
+  }, [intervalTime, sendNotification, isMuted, addLog]);
 
-  // Native Polling Logic (Fallback for Worker)
+  // Foreground Polling Logic (Replaces Worker and Native Check)
   const isCheckingRef = useRef(false);
   
-  const runNativeCheck = useCallback(async () => {
+  const runForegroundCheck = useCallback(async () => {
       // Use ref directly to always get latest state without closure issues
       const currentPlayers = playersRef.current;
       
@@ -642,6 +644,7 @@ const App: React.FC = () => {
       // where a check starts just as monitoring is stopped.
       if (!isMonitoring || currentPlayers.length === 0 || isCheckingRef.current) return;
       isCheckingRef.current = true;
+      setCountdown(intervalTime); // Reset countdown when check starts
 
       const updates: any[] = [];
       const alerts: { message: string, type: 'addition' | 'removal' | 'substitution' }[] = [];
@@ -732,7 +735,7 @@ const App: React.FC = () => {
                   updates.push({ id: player.id, stats });
               }
           } catch (e) {
-              console.error('Native fetch error', e);
+              console.error('Foreground fetch error', e);
           }
       }
 
@@ -744,75 +747,78 @@ const App: React.FC = () => {
 
       handleWorkerResult(updates, alerts);
       isCheckingRef.current = false;
-  }, [isMonitoring, handleWorkerResult]);
+  }, [isMonitoring, handleWorkerResult, intervalTime, addLog]);
+
+  // Force update when returning to app
+  const forceUpdate = useCallback(async () => {
+    if (isMonitoring && document.visibilityState === 'visible') {
+        runForegroundCheck();
+        addLog('Atualização manual...', 'info');
+    }
+  }, [isMonitoring, runForegroundCheck]);
 
   useEffect(() => {
       let timeoutId: any;
       let isActive = true;
       
       const loop = async () => {
-          if (!isActive) return;
-          if (Capacitor.isNativePlatform() && isMonitoring) {
-              await runNativeCheck();
-              if (isActive) {
-                  timeoutId = setTimeout(loop, intervalTime * 1000);
-              }
+          if (!isActive || !isMonitoring || document.visibilityState !== 'visible') return;
+          await runForegroundCheck();
+          if (isActive && isMonitoring && document.visibilityState === 'visible') {
+              timeoutId = setTimeout(loop, intervalTime * 1000);
           }
       };
 
-      if (Capacitor.isNativePlatform() && isMonitoring) {
+      const handleVisibilityChange = () => {
+          if (document.visibilityState === 'visible' && isMonitoring) {
+              // Restart loop when returning to foreground
+              clearTimeout(timeoutId);
+              loop();
+          } else {
+              // Pause loop when going to background
+              clearTimeout(timeoutId);
+          }
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      
+      let appStateListener: any;
+      if (Capacitor.isNativePlatform()) {
+          CapApp.addListener('appStateChange', async ({ isActive }) => {
+              if (isActive && isMonitoring) {
+                  clearTimeout(timeoutId);
+                  loop();
+              } else {
+                  clearTimeout(timeoutId);
+              }
+          }).then(listener => {
+              appStateListener = listener;
+              if (!isActive) {
+                  listener.remove();
+              }
+          });
+      }
+
+      if (isMonitoring && document.visibilityState === 'visible') {
           loop();
       }
       
       return () => {
           isActive = false;
           clearTimeout(timeoutId);
+          document.removeEventListener('visibilitychange', handleVisibilityChange);
+          if (appStateListener && appStateListener.remove) appStateListener.remove();
       };
-  }, [isMonitoring, intervalTime, runNativeCheck]);
+  }, [isMonitoring, intervalTime, runForegroundCheck]);
 
-  // Initialize Worker (Web Only)
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) {
-        workerRef.current = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
-        workerRef.current.onerror = (e) => console.error('Worker error:', e);
-    }
-    return () => {
-        workerRef.current?.terminate();
-    };
-  }, []);
-
-  // Update onmessage handler
-  useEffect(() => {
-    if (workerRef.current) {
-        workerRef.current.onmessage = (e) => {
-            const { type, updates, alerts, message, monitoredGames } = e.data;
-            if (type === 'ERROR') {
-                addToast(message, 'error');
-            } else if (type === 'RESULT') {
-                handleWorkerResult(updates, alerts, monitoredGames);
-            }
-        };
-    }
-  }, [handleWorkerResult]);
+  // Worker logic removed - using runForegroundCheck for both Web and Native
 
 
 
 
 
 
-  // Sync players with worker
-  useEffect(() => {
-      if (isMonitoring && workerRef.current) {
-          workerRef.current.postMessage({ type: 'UPDATE_PLAYERS', payload: players });
-      }
-  }, [players, isMonitoring]);
-
-  // Sync monitoredGames with worker
-  useEffect(() => {
-      if (isMonitoring && workerRef.current) {
-          workerRef.current.postMessage({ type: 'UPDATE_MONITORED_GAMES', payload: monitoredGames });
-      }
-  }, [monitoredGames, isMonitoring]);
+  // Sync logic removed as we use refs directly in runForegroundCheck
 
 
 
@@ -913,38 +919,25 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('is_monitoring', String(isMonitoring)); }, [isMonitoring]);
   useEffect(() => { 
     localStorage.setItem('interval_time', String(intervalTime)); 
-    if (isMonitoring && workerRef.current) {
-        workerRef.current.postMessage({ type: 'UPDATE_INTERVAL', payload: intervalTime });
-    }
   }, [intervalTime, isMonitoring]);
   useEffect(() => { localStorage.setItem('match_logs', JSON.stringify(logs)); }, [logs]);
   useEffect(() => {
     playersRef.current = players;
     localStorage.setItem('monitored_players', JSON.stringify(players));
     
-    // Sync with worker if monitoring is active and list changed by USER (not worker)
-    if (isMonitoring && workerRef.current && !isWorkerUpdate.current) {
-        workerRef.current.postMessage({ type: 'UPDATE_PLAYERS', payload: players });
-    }
     // Reset flag
     isWorkerUpdate.current = false;
 
     // Auto-stop if list is empty
     if (players.length === 0 && isMonitoring) {
         setIsMonitoring(false);
-        workerRef.current?.postMessage({ type: 'STOP' });
         addLog('Monitoramento parado: Lista vazia', 'info');
     }
   }, [players, isMonitoring]);
 
   useEffect(() => {
     if ('Notification' in window && !Capacitor.isNativePlatform()) {
-      const checkPermission = () => {
-          const current = Notification.permission;
-          setNotifPermission(current);
-      };
-      const permInterval = setInterval(checkPermission, 1500);
-      return () => clearInterval(permInterval);
+      setNotifPermission(Notification.permission);
     }
   }, []);
 
@@ -971,6 +964,29 @@ const App: React.FC = () => {
       }
   };
 
+  const handleGoogleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      addToast('Login realizado com sucesso!', 'success');
+      setIsSettingsOpen(false);
+    } catch (error) {
+      console.error('Erro no login com Google:', error);
+      addToast('Erro ao fazer login', 'error');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setPlayers([]);
+      addToast('Desconectado com sucesso', 'success');
+      setIsSettingsOpen(false);
+    } catch (error) {
+      console.error('Erro ao sair:', error);
+    }
+  };
+
   const handleStartMonitoring = async () => {
       if (players.length === 0 && !isMonitoring) {
           addToast('Adicione jogadores para monitorar', 'error');
@@ -981,14 +997,6 @@ const App: React.FC = () => {
       setIsMonitoring(newMonitoringState);
       
       if (newMonitoringState) {
-          // Start Worker
-          if (workerRef.current) {
-              workerRef.current.postMessage({ 
-                  type: 'START', 
-                  payload: { players, interval: intervalTime } 
-              });
-          }
-
           (async () => {
               try {
                   if (Capacitor.isNativePlatform()) {
@@ -1004,9 +1012,6 @@ const App: React.FC = () => {
                   }
               } catch (err) {}
           })();
-      } else { 
-          // Stop Worker
-          workerRef.current?.postMessage({ type: 'STOP' });
       }
   };
 
@@ -1018,20 +1023,13 @@ const App: React.FC = () => {
   useEffect(() => {
     if (isMonitoring) {
         setCountdown(intervalTime);
-        zeroCountRef.current = 0;
         
         countdownRef.current = setInterval(() => {
+            if (document.visibilityState !== 'visible') return; // Pause countdown in background
             setCountdown(prev => {
                 if (prev <= 0) {
-                    zeroCountRef.current += 1;
-                    // Se ficar no 0 por mais de 10 segundos extras, força o worker
-                    if (zeroCountRef.current > 10) {
-                        forceUpdate();
-                        zeroCountRef.current = 0;
-                    }
                     return 0;
                 }
-                zeroCountRef.current = 0;
                 return prev - 1;
             });
         }, 1000);
@@ -1077,7 +1075,11 @@ const App: React.FC = () => {
     setIsLoadingLineups(false);
   };
 
-  const addPlayer = (gamePlayer: GamePlayer) => {
+  const addPlayer = async (gamePlayer: GamePlayer) => {
+    if (!user) {
+        addToast('Faça login para adicionar jogadores', 'error');
+        return;
+    }
     if (players.some(p => p.sofaId === gamePlayer.id)) { addLog(`${gamePlayer.name} já está no radar`, 'alert'); return; }
     if (!selectedGameId) return;
 
@@ -1122,50 +1124,51 @@ const App: React.FC = () => {
         },
         lastStats: initialStats
     };
-    setPlayers(prev => [...prev, newPlayer]);
-    addLog(`${gamePlayer.name} monitorado`, 'success');
-    addToast(`${gamePlayer.name} adicionado!`, 'success');
+    
+    try {
+        await setDoc(doc(db, `users/${user.uid}/monitoredPlayers`, newPlayer.id.toString()), newPlayer);
+        addLog(`${gamePlayer.name} monitorado`, 'success');
+        addToast(`${gamePlayer.name} adicionado!`, 'success');
+    } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, `users/${user.uid}/monitoredPlayers/${newPlayer.id}`);
+    }
   };
 
   const renderHelpModal = () => (
     <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
-        <div className="bg-zinc-900 border border-emerald-500/30 w-full max-w-sm rounded-[2rem] p-6 relative shadow-[0_0_50px_rgba(16,185,129,0.15)] overflow-y-auto max-h-[90vh]">
-            <button onClick={() => setIsHelpOpen(false)} className="absolute top-4 right-4 p-2 bg-black/20 rounded-full text-zinc-400 hover:text-white transition-colors">
+        <div className="bg-[#121212] border border-white/10 w-full max-w-sm rounded-[2rem] p-6 relative shadow-2xl overflow-y-auto max-h-[90vh]">
+            <button onClick={() => setIsHelpOpen(false)} className="absolute top-4 right-4 p-2 bg-[#1e1e1e] hover:bg-[#2a2a2a] rounded-full text-zinc-400 hover:text-white transition-colors">
                 <X size={20} />
             </button>
             <div className="flex flex-col items-center text-center gap-4 mt-2">
-                <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-1 animate-pulse"><Bell size={32} className="text-emerald-500" /></div>
+                <div className="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center mb-1 border border-blue-500/20"><Bell size={28} className="text-blue-500" /></div>
                 <div>
-                    <h3 className="text-xl font-black uppercase text-white tracking-tight mb-2">Ajuda & Configuração</h3>
-                    <p className="text-[11px] text-zinc-400 leading-relaxed font-medium mb-4 px-2 italic">Configure seu Android para garantir que o monitoramento funcione em segundo plano.</p>
+                    <h3 className="text-xl font-bold text-white tracking-tight mb-2">Ajuda & Configuração</h3>
+                    <p className="text-xs text-zinc-400 leading-relaxed font-medium mb-4 px-2">Configure seu dispositivo para garantir que o monitoramento funcione em segundo plano.</p>
                 </div>
                 
-                <div className="bg-black/40 p-5 rounded-2xl text-left w-full border border-white/5 space-y-4">
+                <div className="bg-[#1e1e1e] p-5 rounded-2xl text-left w-full border border-white/5 space-y-4">
                     <div className="flex gap-4">
-                        <div className="w-7 h-7 bg-emerald-500/20 rounded-lg flex items-center justify-center text-xs font-bold text-emerald-400 shrink-0">1</div>
+                        <div className="w-7 h-7 bg-blue-500/10 rounded-lg flex items-center justify-center text-xs font-bold text-blue-400 shrink-0 border border-blue-500/20">1</div>
                         <div className="space-y-1">
-                            <p className="text-[11px] text-zinc-300 font-bold uppercase">Bateria & Otimização</p>
-                            <p className="text-[10px] text-zinc-500">O Android mata apps em segundo plano. Para evitar isso:</p>
-                            <div className="bg-zinc-800/50 p-2 rounded-lg border border-white/5 mt-1">
-                                <p className="text-[9px] text-zinc-400">
-                                    1. Abra <strong>Configurações</strong> do Android<br/>
-                                    2. Vá em <strong>Aplicativos</strong> &gt; <strong>LiveMatch Tracker</strong><br/>
+                            <p className="text-xs text-zinc-300 font-bold">Bateria & Otimização</p>
+                            <p className="text-[10px] text-zinc-500">O sistema pode pausar apps em segundo plano. Para evitar isso:</p>
+                            <div className="bg-[#2a2a2a] p-3 rounded-xl border border-white/5 mt-2">
+                                <p className="text-[10px] text-zinc-400 leading-relaxed">
+                                    1. Abra <strong>Configurações</strong><br/>
+                                    2. Vá em <strong>Aplicativos</strong> &gt; <strong>LiveMatch Pro</strong><br/>
                                     3. Toque em <strong>Bateria</strong><br/>
-                                    4. Selecione <strong>"Sem Restrições"</strong> (ou "Não Otimizar")
+                                    4. Selecione <strong>"Sem Restrições"</strong>
                                 </p>
                             </div>
                         </div>
                     </div>
 
                     <div className="flex gap-4">
-                        <div className="w-7 h-7 bg-emerald-500/20 rounded-lg flex items-center justify-center text-xs font-bold text-emerald-400 shrink-0">2</div>
+                        <div className="w-7 h-7 bg-blue-500/10 rounded-lg flex items-center justify-center text-xs font-bold text-blue-400 shrink-0 border border-blue-500/20">2</div>
                         <div className="space-y-1">
-                            <p className="text-[11px] text-zinc-300 font-bold uppercase">Notificações Bloqueadas?</p>
-                            <p className="text-[10px] text-zinc-500">Se o botão de notificação estiver cinza nas configurações:</p>
-                            <ul className="list-disc pl-4 text-[9px] text-zinc-500 space-y-1 mt-1">
-                                <li>Toque nos 3 pontinhos (canto superior)</li>
-                                <li>"Permitir configurações restritas"</li>
-                            </ul>
+                            <p className="text-xs text-zinc-300 font-bold">Notificações</p>
+                            <p className="text-[10px] text-zinc-500">Certifique-se de que as notificações estão permitidas para o aplicativo nas configurações do sistema.</p>
                         </div>
                     </div>
                 </div>
@@ -1178,7 +1181,7 @@ const App: React.FC = () => {
                              await Notification.requestPermission();
                         }
                         setIsHelpOpen(false);
-                    }} className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 shadow-lg shadow-emerald-900/20">Solicitar Permissões</button>
+                    }} className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors text-sm shadow-lg">Solicitar Permissões</button>
                 </div>
             </div>
         </div>
@@ -1194,7 +1197,7 @@ const App: React.FC = () => {
                 className="w-full h-full object-contain relative z-10"
             />
             <div className="absolute bottom-3 right-3 z-20">
-                <div className="px-2 py-1 bg-black/60 backdrop-blur-md rounded-lg border border-white/10 text-[7px] font-black text-zinc-400 uppercase tracking-widest">
+                <div className="px-2 py-1 bg-[#1e1e1e]/80 backdrop-blur-md rounded-lg border border-white/10 text-[10px] font-medium text-zinc-400">
                     Atualizado em tempo real
                 </div>
             </div>
@@ -1213,94 +1216,101 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
 
     return (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
-            <div className="bg-zinc-900/95 backdrop-blur-xl w-full max-w-md rounded-[2.5rem] border border-white/10 p-8 relative shadow-2xl overflow-y-auto max-h-[90vh] ring-1 ring-white/5">
+            <div className="bg-[#121212] w-full max-w-md rounded-[2rem] border border-white/10 p-6 relative shadow-2xl overflow-y-auto max-h-[90vh]">
                 <div className="flex justify-between items-start mb-8">
-                    <div className="flex items-center gap-5">
-                        <div className="w-20 h-20 bg-black rounded-3xl border border-white/10 overflow-hidden shadow-2xl ring-1 ring-black/50">
+                    <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 bg-[#1e1e1e] rounded-2xl border border-white/5 overflow-hidden shadow-lg shrink-0">
                             <SofaImage playerId={player.sofaId} alt={player.name} className="w-full h-full object-cover" />
                         </div>
                         <div>
-                            <h3 className="text-2xl font-black uppercase text-white tracking-tighter leading-none mb-2">{player.name}</h3>
-                            <div className="flex items-center gap-3">
-                                <span className={`px-3 py-1 rounded-xl text-xs font-black font-mono shadow-lg ${s.rating >= 7 ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-white'}`}>
-                                    {s.rating.toFixed(1)} <span className="opacity-60 ml-1 text-[10px]">RATING</span>
+                            <h3 className="text-xl font-bold text-white tracking-tight leading-none mb-2">{player.name}</h3>
+                            <div className="flex items-center gap-2">
+                                <span className={`px-2 py-1 rounded-lg text-xs font-bold shadow-sm ${
+                                    !s.rating ? 'bg-[#1e1e1e] text-zinc-400' :
+                                    s.rating >= 8.0 ? 'bg-blue-600 text-white' :
+                                    s.rating >= 7.5 ? 'bg-blue-500 text-white' :
+                                    s.rating >= 7.0 ? 'bg-emerald-500 text-white' :
+                                    s.rating >= 6.5 ? 'bg-yellow-500 text-black' :
+                                    s.rating >= 6.0 ? 'bg-orange-500 text-white' : 'bg-red-500 text-white'
+                                }`}>
+                                    {s.rating.toFixed(1)} <span className="opacity-70 ml-1 text-[10px] font-medium">RATING</span>
                                 </span>
-                                <span className="text-[10px] text-zinc-500 font-black uppercase tracking-widest bg-white/5 px-3 py-1 rounded-lg border border-white/5">{s.minutes}' JOGADOS</span>
+                                <span className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider bg-[#1e1e1e] px-2 py-1 rounded-lg border border-white/5">{s.minutes}' JOGADOS</span>
                             </div>
                         </div>
                     </div>
-                    <button onClick={onClose} className="bg-white/5 p-2.5 rounded-full text-zinc-400 hover:text-white transition-colors"><X size={24}/></button>
+                    <button onClick={onClose} className="bg-[#1e1e1e] p-2 rounded-full text-zinc-400 hover:text-white hover:bg-[#2a2a2a] transition-colors shrink-0"><X size={20}/></button>
                 </div>
 
-                <div className="space-y-8">
+                <div className="space-y-6">
                     {/* Ataque */}
                     <div className="animate-in slide-in-from-bottom-2 duration-300 delay-75">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-8 h-8 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
-                                <Target size={16} className="text-blue-400"/>
+                        <div className="flex items-center gap-2 mb-3">
+                            <div className="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                                <Target size={14} className="text-blue-400"/>
                             </div>
-                            <h4 className="text-xs font-black uppercase text-white tracking-[0.2em]">Ataque</h4>
+                            <h4 className="text-xs font-bold uppercase text-zinc-300 tracking-wider">Ataque</h4>
                         </div>
-                        <div className="grid grid-cols-3 gap-3">
-                            <div className="bg-black/30 p-4 rounded-2xl border border-white/5 text-center group hover:bg-black/40 transition-colors">
-                                <div className="text-2xl font-black text-white font-mono mb-0.5">{s.goals}</div>
-                                <div className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Gols</div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-[#1e1e1e] p-3 rounded-xl border border-white/5 text-center transition-colors">
+                                <div className="text-xl font-bold text-white mb-0.5">{s.goals}</div>
+                                <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Gols</div>
                             </div>
-                            <div className="bg-black/30 p-4 rounded-2xl border border-white/5 text-center group hover:bg-black/40 transition-colors">
-                                <div className="text-2xl font-black text-white font-mono mb-0.5">{s.assists}</div>
-                                <div className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Assists</div>
+                            <div className="bg-[#1e1e1e] p-3 rounded-xl border border-white/5 text-center transition-colors">
+                                <div className="text-xl font-bold text-white mb-0.5">{s.assists}</div>
+                                <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Assists</div>
                             </div>
-                            <div className="bg-black/30 p-4 rounded-2xl border border-white/5 text-center group hover:bg-black/40 transition-colors">
-                                <div className="text-2xl font-black text-white font-mono mb-0.5">{s.shotsOnTarget}<span className="text-zinc-600 text-sm mx-0.5">/</span>{s.shotsTotal}</div>
-                                <div className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Chutes (Alvo)</div>
+                            <div className="bg-[#1e1e1e] p-3 rounded-xl border border-white/5 text-center transition-colors col-span-2">
+                                <div className="text-xl font-bold text-white mb-0.5">{s.shotsOnTarget}<span className="text-zinc-600 text-sm mx-0.5">/</span>{s.shotsTotal}</div>
+                                <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Chutes (Alvo / Total)</div>
                             </div>
                         </div>
                     </div>
 
                     {/* Construção */}
                     <div className="animate-in slide-in-from-bottom-2 duration-300 delay-150">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
-                                <Activity size={16} className="text-emerald-400"/>
+                        <div className="flex items-center gap-2 mb-3">
+                            <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                                <Activity size={14} className="text-emerald-400"/>
                             </div>
-                            <h4 className="text-xs font-black uppercase text-white tracking-[0.2em]">Construção</h4>
+                            <h4 className="text-xs font-bold uppercase text-zinc-300 tracking-wider">Construção</h4>
                         </div>
-                        <div className="grid grid-cols-3 gap-3">
-                            <div className="bg-black/30 p-4 rounded-2xl border border-white/5 text-center group hover:bg-black/40 transition-colors">
-                                <div className="text-2xl font-black text-white font-mono mb-0.5">{s.keyPasses}</div>
-                                <div className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Passes Dec.</div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-[#1e1e1e] p-3 rounded-xl border border-white/5 text-center transition-colors">
+                                <div className="text-xl font-bold text-white mb-0.5">{s.keyPasses}</div>
+                                <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Passes Decisivos</div>
                             </div>
-                            <div className="bg-black/30 p-4 rounded-2xl border border-white/5 text-center group hover:bg-black/40 transition-colors">
-                                <div className="text-2xl font-black text-white font-mono mb-0.5">{s.totalPasses}</div>
-                                <div className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Passes Tot.</div>
+                            <div className="bg-[#1e1e1e] p-3 rounded-xl border border-white/5 text-center transition-colors">
+                                <div className="text-xl font-bold text-white mb-0.5">{s.totalPasses}</div>
+                                <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Passes Totais</div>
                             </div>
-                            <div className="bg-black/30 p-4 rounded-2xl border border-white/5 text-center group hover:bg-black/40 transition-colors">
-                                <div className="text-2xl font-black text-white font-mono mb-0.5">{s.foulsDrawn}</div>
-                                <div className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Sofridas</div>
+                            <div className="bg-[#1e1e1e] p-3 rounded-xl border border-white/5 text-center transition-colors col-span-2">
+                                <div className="text-xl font-bold text-white mb-0.5">{s.foulsDrawn}</div>
+                                <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Faltas Sofridas</div>
                             </div>
                         </div>
                     </div>
 
                     {/* Defesa */}
                     <div className="animate-in slide-in-from-bottom-2 duration-300 delay-200">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-8 h-8 rounded-xl bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
-                                <Shield size={16} className="text-orange-400"/>
+                        <div className="flex items-center gap-2 mb-3">
+                            <div className="w-7 h-7 rounded-lg bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
+                                <Shield size={14} className="text-orange-400"/>
                             </div>
-                            <h4 className="text-xs font-black uppercase text-white tracking-[0.2em]">Defesa</h4>
+                            <h4 className="text-xs font-bold uppercase text-zinc-300 tracking-wider">Defesa</h4>
                         </div>
-                        <div className="grid grid-cols-3 gap-3">
-                            <div className="bg-black/30 p-4 rounded-2xl border border-white/5 text-center group hover:bg-black/40 transition-colors">
-                                <div className="text-2xl font-black text-white font-mono mb-0.5">{s.tackles}</div>
-                                <div className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Desarmes</div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-[#1e1e1e] p-3 rounded-xl border border-white/5 text-center transition-colors">
+                                <div className="text-xl font-bold text-white mb-0.5">{s.tackles}</div>
+                                <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Desarmes</div>
                             </div>
-                            <div className="bg-black/30 p-4 rounded-2xl border border-white/5 text-center group hover:bg-black/40 transition-colors">
-                                <div className="text-2xl font-black text-white font-mono mb-0.5">{s.interceptions}</div>
-                                <div className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Intercep.</div>
+                            <div className="bg-[#1e1e1e] p-3 rounded-xl border border-white/5 text-center transition-colors">
+                                <div className="text-xl font-bold text-white mb-0.5">{s.interceptions}</div>
+                                <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Interceptações</div>
                             </div>
-                            <div className="bg-black/30 p-4 rounded-2xl border border-white/5 text-center group hover:bg-black/40 transition-colors">
-                                <div className="text-2xl font-black text-white font-mono mb-0.5">{s.duelsWon}</div>
-                                <div className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Duelos</div>
+                            <div className="bg-[#1e1e1e] p-3 rounded-xl border border-white/5 text-center transition-colors col-span-2">
+                                <div className="text-xl font-bold text-white mb-0.5">{s.duelsWon}</div>
+                                <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Duelos Ganhos</div>
                             </div>
                         </div>
                     </div>
@@ -1310,12 +1320,25 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
     );
 };
 
-  const removePlayer = (id: number) => setPlayers(prev => prev.filter(p => p.id !== id));
-  const toggleAlert = (playerId: number, key: keyof MonitoredPlayer['alerts']) => {
-    setPlayers(prev => prev.map(p => {
-        if (p.id !== playerId) return p;
-        return { ...p, alerts: { ...p.alerts, [key]: !p.alerts[key] } };
-    }));
+  const removePlayer = async (id: number) => {
+    if (!user) return;
+    try {
+        await deleteDoc(doc(db, `users/${user.uid}/monitoredPlayers`, id.toString()));
+    } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, `users/${user.uid}/monitoredPlayers/${id}`);
+    }
+  };
+  const toggleAlert = async (playerId: number, key: keyof MonitoredPlayer['alerts']) => {
+    if (!user) return;
+    const player = players.find(p => p.id === playerId);
+    if (!player) return;
+    
+    const updatedPlayer = { ...player, alerts: { ...player.alerts, [key]: !player.alerts[key] } };
+    try {
+        await setDoc(doc(db, `users/${user.uid}/monitoredPlayers`, playerId.toString()), updatedPlayer);
+    } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/monitoredPlayers/${playerId}`);
+    }
   };
 
     const renderPlayerCard = (p: MonitoredPlayer) => {
@@ -1344,49 +1367,56 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
     ];
 
     return (
-        <div key={p.id} className={`bg-gradient-to-br from-zinc-900 to-black rounded-[2rem] border transition-all duration-500 overflow-hidden relative shadow-2xl group ${isUpdated ? 'border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.3)] scale-[1.02] ring-1 ring-emerald-500/50' : 'border-zinc-800 hover:border-zinc-700'}`}>
-            {isUpdated && <div className="absolute inset-0 bg-emerald-500/10 animate-pulse pointer-events-none z-0" />}
+        <div key={p.id} className={`bg-[#1e1e1e] rounded-2xl border transition-all duration-500 overflow-hidden relative shadow-lg group ${isUpdated ? 'border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.2)] scale-[1.01]' : 'border-white/5 hover:border-white/10'}`}>
+            {isUpdated && <div className="absolute inset-0 bg-blue-500/5 animate-pulse pointer-events-none z-0" />}
             
             {/* Header: Imagem, Nome e Ações */}
-            <div className="p-5 flex gap-4 items-center border-b border-white/5 bg-white/[0.02]">
+            <div className="p-4 flex gap-4 items-center border-b border-white/5 bg-[#1e1e1e]">
                 <div className="relative">
-                    <div className="w-14 h-14 bg-black rounded-2xl border border-zinc-700 overflow-hidden shadow-lg relative z-10">
+                    <div className="w-14 h-14 bg-[#2a2a2a] rounded-full border border-white/10 overflow-hidden relative z-10 shrink-0">
                         <SofaImage playerId={p.sofaId} alt={p.name} className="w-full h-full object-cover" />
                     </div>
                     {/* Indicador de Rating */}
                     {s.rating > 0 && (
-                        <div className={`absolute -bottom-2 -right-2 z-20 px-1.5 py-0.5 rounded-lg border border-black/50 shadow-md text-[10px] font-black font-mono ${s.rating >= 7 ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-white'}`}>
+                        <div className={`absolute -bottom-1 -right-1 z-20 px-1.5 py-0.5 rounded-md border border-black/50 shadow-md text-[10px] font-bold ${
+                            !s.rating ? 'bg-[#1e1e1e] text-zinc-400' :
+                            s.rating >= 8.0 ? 'bg-blue-600 text-white' :
+                            s.rating >= 7.5 ? 'bg-blue-500 text-white' :
+                            s.rating >= 7.0 ? 'bg-emerald-500 text-white' :
+                            s.rating >= 6.5 ? 'bg-yellow-500 text-black' :
+                            s.rating >= 6.0 ? 'bg-orange-500 text-white' : 'bg-red-500 text-white'
+                        }`}>
                             {s.rating.toFixed(1)}
                         </div>
                     )}
                 </div>
                 
                 <div className="flex-1 min-w-0">
-                    <h3 className="font-black text-white text-lg leading-tight uppercase tracking-tight truncate">{p.name}</h3>
+                    <h3 className="font-bold text-white text-base leading-tight truncate">{p.name}</h3>
                     <div className="flex items-center gap-2 mt-1">
-                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border ${isLive ? 'bg-emerald-500/10 border-emerald-500/10' : isHalftime ? 'bg-amber-500/10 border-amber-500/10' : 'bg-zinc-800/50 border-white/5'}`}>
-                            {isLive && <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />}
-                            <span className={`text-[9px] font-black tracking-widest uppercase ${isLive ? 'text-emerald-400' : isHalftime ? 'text-amber-400' : 'text-zinc-400'}`}>{gameStatusText}</span>
+                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md ${isLive ? 'bg-blue-500/10 text-blue-400' : isHalftime ? 'bg-amber-500/10 text-amber-400' : 'bg-[#2a2a2a] text-zinc-400'}`}>
+                            {isLive && <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />}
+                            <span className="text-[10px] font-bold uppercase tracking-wide">{gameStatusText}</span>
                         </div>
-                        <div className="flex items-center gap-1.5 bg-zinc-800/50 px-2 py-0.5 rounded-md border border-white/5">
-                             <span className="text-[9px] text-zinc-300 font-black tracking-widest uppercase">{s.minutes}'</span>
+                        <div className="flex items-center gap-1.5 bg-[#2a2a2a] px-2 py-0.5 rounded-md">
+                             <span className="text-[10px] text-zinc-300 font-bold">{s.minutes}'</span>
                         </div>
-                        <button onClick={() => setSelectedPlayerDetails(p)} className="text-[9px] font-bold uppercase text-zinc-500 hover:text-white flex items-center gap-1 bg-zinc-800/50 px-2 py-0.5 rounded-md transition-colors">
+                        <button onClick={() => setSelectedPlayerDetails(p)} className="text-[10px] font-bold text-zinc-400 hover:text-white flex items-center gap-1 bg-[#2a2a2a] px-2 py-0.5 rounded-md transition-colors">
                             <Plus size={10} /> Detalhes
                         </button>
                     </div>
                 </div>
 
-                <button onClick={() => removePlayer(p.id)} className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-800/50 text-zinc-500 hover:bg-red-500/20 hover:text-red-400 transition-colors">
-                    <Trash2 size={16} />
+                <button onClick={() => removePlayer(p.id)} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#2a2a2a] text-zinc-400 hover:bg-red-500/20 hover:text-red-400 transition-colors shrink-0">
+                    <Trash2 size={14} />
                 </button>
             </div>
 
-            {/* Grid de Estatísticas e Controles */}
-            <div className="p-4 bg-black/20">
+                    {/* Grid de Estatísticas e Controles */}
+            <div className="p-4 bg-[#121212]">
                 <div className="flex items-center gap-2 mb-3 px-1">
-                    <Activity size={12} className="text-zinc-600" />
-                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">Painel de Alertas</span>
+                    <Activity size={12} className="text-zinc-500" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Alertas</span>
                 </div>
                 
                 <div className="grid grid-cols-3 gap-2">
@@ -1398,24 +1428,24 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
                                 key={item.key} 
                                 onClick={() => toggleAlert(p.id, item.key as keyof typeof p.alerts)}
                                 className={`
-                                    relative p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all duration-200 active:scale-95 group/btn
+                                    relative p-3 rounded-xl border flex flex-col items-start justify-center gap-1 transition-all duration-200 active:scale-95 group/btn overflow-hidden
                                     ${isActive 
-                                        ? 'bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.05)]' 
-                                        : 'bg-zinc-900/50 border-white/5 opacity-60 hover:opacity-100 hover:bg-zinc-800'}
+                                        ? 'bg-blue-500/10 border-blue-500/30' 
+                                        : 'bg-[#1e1e1e] border-white/5 hover:bg-[#2a2a2a]'}
                                 `}
                             >
-                                <div className="flex w-full justify-between items-start">
-                                    <Icon size={12} className={isActive ? 'text-emerald-400' : 'text-zinc-600'} />
-                                    <span className={`font-mono font-black text-lg leading-none ${isActive ? 'text-white' : 'text-zinc-500'}`}>
+                                <div className="flex w-full justify-between items-center mb-1">
+                                    <Icon size={14} className={isActive ? 'text-blue-400' : 'text-zinc-500'} />
+                                    <span className={`font-bold text-sm leading-none ${isActive ? 'text-white' : 'text-zinc-400'}`}>
                                         {item.val}
                                     </span>
                                 </div>
-                                <span className={`text-[9px] font-black uppercase tracking-tight w-full text-left truncate ${isActive ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                                <span className={`text-[10px] font-bold w-full text-left truncate ${isActive ? 'text-blue-400' : 'text-zinc-500'}`}>
                                     {item.label}
                                 </span>
                                 
                                 {/* Indicador visual de status ON/OFF */}
-                                <div className={`absolute top-2 right-2 w-1.5 h-1.5 rounded-full transition-colors ${isActive ? 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,1)]' : 'bg-zinc-800'}`} />
+                                <div className={`absolute top-2 right-2 w-1.5 h-1.5 rounded-full transition-colors ${isActive ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'bg-transparent'}`} />
                             </button>
                         )
                     })}
@@ -1426,27 +1456,27 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
   };
 
   const renderMonitor = () => (
-    <div className="space-y-6 pb-32 safe-area-top animate-in fade-in duration-500">
+    <div className="space-y-6 safe-area-top animate-in fade-in duration-500">
       {/* Header Dashboard */}
-      <div className="bg-zinc-950/80 backdrop-blur-xl p-6 border-b border-white/5 sticky top-0 z-30 shadow-2xl safe-area-top pt-safe-top">
+      <div className="bg-[#0a0a0a]/90 backdrop-blur-xl p-6 border-b border-white/5 sticky top-0 z-30 shadow-lg safe-area-top pt-safe-top">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
             <div className="flex items-center gap-6">
                 <div className="flex flex-col">
-                    <span className="text-[9px] text-zinc-500 font-black uppercase tracking-[0.2em] leading-none mb-1.5">Status do Sistema</span>
+                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Status do Sistema</span>
                     <div className="flex items-center gap-3">
-                        <div className={`relative flex h-3 w-3 ${isMonitoring ? '' : 'opacity-50'}`}>
-                          {isMonitoring && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
-                          <span className={`relative inline-flex rounded-full h-3 w-3 ${isMonitoring ? 'bg-emerald-500' : 'bg-zinc-600'}`}></span>
+                        <div className={`relative flex h-2.5 w-2.5 ${isMonitoring ? '' : 'opacity-50'}`}>
+                          {isMonitoring && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>}
+                          <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isMonitoring ? 'bg-blue-500' : 'bg-zinc-600'}`}></span>
                         </div>
                         <div className="flex flex-col">
-                            <span className={`text-lg font-black tracking-tight leading-none ${isMonitoring ? 'text-white' : 'text-zinc-500'}`}>
+                            <span className={`text-lg font-bold leading-none ${isMonitoring ? 'text-white' : 'text-zinc-500'}`}>
                                 {isMonitoring ? 'MONITORANDO' : 'PAUSADO'}
                             </span>
                             {isMonitoring && (
-                                <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-tighter">{lastSync}</span>
-                                    <button onClick={forceUpdate} className="md:hidden text-emerald-500 active:scale-90 transition-transform">
-                                        <RefreshCw size={10} />
+                                <div className="flex items-center gap-2 mt-1.5">
+                                    <span className="text-[10px] font-bold text-zinc-500">{lastSync}</span>
+                                    <button onClick={forceUpdate} className="md:hidden text-blue-500 active:scale-90 transition-transform">
+                                        <RefreshCw size={12} />
                                     </button>
                                 </div>
                             )}
@@ -1456,15 +1486,15 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
                 
                 {isMonitoring && (
                     <div className="hidden md:flex flex-col border-l border-white/10 pl-6">
-                        <div className="flex items-center gap-3 mb-1.5">
-                            <span className="text-[9px] text-zinc-500 font-black uppercase tracking-[0.2em] leading-none">Próxima Varredura</span>
-                            <button onClick={forceUpdate} className="text-emerald-500 hover:text-emerald-400 transition-colors">
-                                <RefreshCw size={10} />
+                        <div className="flex items-center gap-3 mb-1">
+                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Próxima Varredura</span>
+                            <button onClick={forceUpdate} className="text-blue-500 hover:text-blue-400 transition-colors">
+                                <RefreshCw size={12} />
                             </button>
                         </div>
-                        <div className="flex items-baseline gap-1">
-                            <span className="text-lg font-mono text-emerald-400 font-black">{countdown}</span>
-                            <span className="text-[10px] text-zinc-600 font-bold uppercase">segundos</span>
+                        <div className="flex items-baseline gap-1.5">
+                            <span className="text-xl font-mono text-blue-400 font-bold">{countdown}</span>
+                            <span className="text-xs text-zinc-500 font-bold">segundos</span>
                         </div>
                     </div>
                 )}
@@ -1474,10 +1504,10 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
                 <button 
                     onClick={handleStartMonitoring} 
                     className={`
-                        h-12 px-6 rounded-2xl font-black flex items-center gap-3 transition-all active:scale-95 shadow-lg uppercase text-xs tracking-widest ring-1 ring-inset
+                        h-12 px-6 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95 text-sm shadow-lg
                         ${isMonitoring 
-                            ? 'bg-red-500/10 text-red-500 ring-red-500/20 hover:bg-red-500/20' 
-                            : 'bg-emerald-500 text-black ring-emerald-400 hover:bg-emerald-400 shadow-emerald-500/20'}
+                            ? 'bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20 shadow-red-500/10' 
+                            : 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-500/20'}
                     `}
                 >
                     {isMonitoring ? (
@@ -1494,7 +1524,7 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
                 </button>
                 <button 
                     onClick={() => setIsSettingsOpen(true)} 
-                    className="h-12 w-12 flex items-center justify-center bg-zinc-900 text-zinc-400 border border-zinc-800 rounded-2xl hover:text-white hover:border-zinc-700 transition-colors active:scale-95"
+                    className="h-12 w-12 flex items-center justify-center bg-[#1e1e1e] text-zinc-400 border border-white/5 rounded-xl hover:text-white hover:bg-[#2a2a2a] transition-colors active:scale-95 shadow-lg"
                 >
                     <Settings size={20} />
                 </button>
@@ -1505,40 +1535,40 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
       <div className="px-6 max-w-7xl mx-auto">
       {players.length === 0 ? (
         <div className="text-center py-32 flex flex-col items-center gap-8 opacity-60 animate-in zoom-in-95 duration-500">
-            <div className="w-24 h-24 bg-zinc-900 rounded-[2.5rem] flex items-center justify-center border border-zinc-800 shadow-2xl rotate-3">
-                <Activity size={40} className="text-zinc-600" />
+            <div className="w-24 h-24 bg-[#1e1e1e] rounded-3xl flex items-center justify-center border border-white/5 shadow-lg">
+                <Activity size={40} className="text-zinc-500" />
             </div>
             <div>
-                <h3 className="text-xl font-black uppercase text-white tracking-tight mb-2">Radar Vazio</h3>
-                <p className="text-sm text-zinc-500 font-medium max-w-[250px] mx-auto leading-relaxed">Adicione jogadores de partidas ao vivo para começar a receber alertas em tempo real.</p>
+                <h3 className="text-xl font-bold text-white mb-2">Radar Vazio</h3>
+                <p className="text-sm text-zinc-400 font-medium max-w-[250px] mx-auto leading-relaxed">Adicione jogadores de partidas ao vivo para começar a receber alertas em tempo real.</p>
             </div>
             <button 
                 onClick={() => { setActiveTab('search'); fetchGames(); }} 
-                className="group bg-white text-black px-8 py-4 rounded-full text-xs font-black uppercase tracking-widest active:scale-95 hover:bg-zinc-200 transition-colors shadow-xl shadow-white/10 flex items-center gap-3"
+                className="group bg-blue-600 text-white px-8 py-3.5 rounded-xl text-sm font-bold active:scale-95 hover:bg-blue-500 transition-all shadow-lg shadow-blue-500/20 flex items-center gap-2"
             >
-                <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300"/>
+                <Plus size={18} className="transition-transform duration-300"/>
                 Adicionar Jogador
             </button>
         </div>
       ) : (
         <>
-            <div className="flex justify-between items-end mb-8 px-2">
+            <div className="flex justify-between items-end mb-6 px-2">
                 <div>
-                    <h2 className="text-3xl font-black uppercase text-white tracking-tighter mb-1">Jogadores</h2>
-                    <div className="flex items-center gap-2 text-zinc-500">
-                        <Activity size={14} className="text-emerald-500" />
-                        <span className="text-xs font-bold uppercase tracking-widest">{players.length} Monitorados</span>
+                    <h2 className="text-2xl font-bold text-white mb-1">Jogadores</h2>
+                    <div className="flex items-center gap-2 text-zinc-400">
+                        <Activity size={14} className="text-blue-500" />
+                        <span className="text-xs font-bold">{players.length} Monitorados</span>
                     </div>
                 </div>
                 <button 
                     onClick={() => setIsClearConfirmOpen(true)} 
-                    className="text-[10px] font-black uppercase text-red-400 bg-red-500/5 px-4 py-2 rounded-xl border border-red-500/10 flex items-center gap-2 hover:bg-red-500/10 transition-colors active:scale-95"
+                    className="text-xs font-bold text-red-400 bg-red-500/10 px-4 py-2 rounded-lg hover:bg-red-500/20 transition-colors active:scale-95 flex items-center gap-1.5 border border-red-500/20"
                 >
-                    <Trash2 size={14} /> Limpar Lista
+                    <Trash2 size={14} /> Limpar
                 </button>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                {players.map(p => renderPlayerCard(p))}
             </div>
         </>
@@ -1548,40 +1578,41 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
   );
 
   const renderSearch = () => (
-    <div className="pb-32 safe-area-top animate-in slide-in-from-bottom-4 duration-500">
-        <div className="sticky top-0 bg-zinc-950/90 backdrop-blur-xl pt-safe-top pb-6 z-30 px-6 border-b border-white/5 mb-6 shadow-2xl">
+    <div className="safe-area-top animate-in slide-in-from-bottom-4 duration-500">
+        <div className="sticky top-0 bg-[#0a0a0a]/90 backdrop-blur-xl pt-safe-top pb-6 z-30 px-6 border-b border-white/5 mb-6 shadow-lg">
              <div className="max-w-7xl mx-auto pt-4">
-                 <h2 className="text-3xl font-black uppercase text-white tracking-tighter mb-4">Buscar Partida</h2>
+                 <h2 className="text-2xl font-bold text-white mb-4 tracking-tight">Buscar Partida</h2>
                  <div className="flex gap-3">
-                    <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center px-5 focus-within:border-emerald-500/50 focus-within:bg-zinc-900/80 transition-all shadow-inner ring-1 ring-white/5 group">
-                        <Search size={20} className="text-zinc-600 group-focus-within:text-emerald-500 transition-colors" />
+                    <div className="flex-1 bg-[#1e1e1e] border border-white/5 rounded-xl flex items-center px-4 focus-within:border-blue-500/50 transition-all shadow-sm group">
+                        <Search size={18} className="text-zinc-500 group-focus-within:text-blue-500 transition-colors" />
                         <input 
                             type="text" 
                             placeholder="Buscar times, campeonatos..." 
                             value={searchTerm} 
                             onChange={(e) => setSearchTerm(e.target.value)} 
-                            className="bg-transparent border-none outline-none text-white p-4 w-full text-base font-bold placeholder:text-zinc-700" 
+                            className="bg-transparent border-none outline-none text-white p-3 w-full text-sm font-bold placeholder:text-zinc-500" 
                         />
                     </div>
                     <button 
                         onClick={fetchGames} 
                         disabled={isLoadingGames} 
-                        className="bg-emerald-500 text-black w-16 rounded-2xl font-black active:scale-90 flex items-center justify-center hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-900/20"
+                        className="bg-blue-600 text-white w-12 rounded-xl flex items-center justify-center hover:bg-blue-500 transition-all active:scale-95 shadow-lg shadow-blue-500/20"
                     >
-                        <RefreshCw size={24} className={isLoadingGames ? 'animate-spin' : ''} />
+                        <RefreshCw size={18} className={isLoadingGames ? 'animate-spin' : ''} />
                     </button>
                  </div>
              </div>
         </div>
         <div className="px-6 max-w-7xl mx-auto">
         {!selectedGameId ? (
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {liveGames.length === 0 && !isLoadingGames && (
-                    <div className="text-center py-32 flex flex-col items-center col-span-full opacity-50">
-                        <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center mb-4">
-                            <Search size={32} className="text-zinc-700" />
+                    <div className="text-center py-32 flex flex-col items-center col-span-full opacity-60">
+                        <div className="w-20 h-20 bg-[#1e1e1e] rounded-[2rem] flex items-center justify-center mb-6 border border-white/5 shadow-lg">
+                            <Search size={32} className="text-zinc-500" />
                         </div>
-                        <p className="font-black text-zinc-500 uppercase text-xs tracking-[0.2em]">Nenhum jogo encontrado</p>
+                        <h3 className="text-xl font-bold text-white mb-2">Nenhum jogo encontrado</h3>
+                        <p className="font-medium text-zinc-400 text-sm max-w-[250px] mx-auto leading-relaxed">Tente buscar por outro time ou campeonato.</p>
                     </div>
                 )}
                 {liveGames.filter(g => api.normalizeString(g.homeTeam.name).includes(api.normalizeString(searchTerm)) || api.normalizeString(g.awayTeam.name).includes(api.normalizeString(searchTerm))).map(game => (<GameCard key={game.id} game={game} onClick={selectGame} isMonitored={monitoredGames.some(g => g.id === game.id)} onToggleMonitor={toggleMonitor} />))}
@@ -1590,26 +1621,26 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
             <div className="animate-in slide-in-from-right duration-500">
                 <button 
                     onClick={() => setSelectedGameId(null)} 
-                    className="mb-8 text-zinc-400 hover:text-white flex items-center gap-3 text-[10px] font-black uppercase tracking-widest bg-zinc-900 px-6 py-4 rounded-2xl border border-zinc-800 active:scale-95 transition-all hover:bg-zinc-800"
+                    className="mb-6 text-zinc-400 hover:text-white flex items-center gap-2 text-xs font-bold bg-[#1e1e1e] px-4 py-2.5 rounded-xl border border-white/5 active:scale-95 transition-all hover:bg-[#2a2a2a] shadow-sm"
                 >
-                    <div className="bg-zinc-800 p-1 rounded-md"><X size={12}/></div>
+                    <X size={16}/>
                     Voltar para Lista
                 </button>
                 
                 {isLoadingLineups ? (
                     <div className="text-center py-40 flex flex-col items-center">
-                        <div className="relative w-16 h-16 mb-8">
-                            <div className="absolute inset-0 border-4 border-zinc-800 rounded-full"></div>
-                            <div className="absolute inset-0 border-4 border-emerald-500 rounded-full border-t-transparent animate-spin"></div>
+                        <div className="relative w-12 h-12 mb-6">
+                            <div className="absolute inset-0 border-4 border-[#1e1e1e] rounded-full"></div>
+                            <div className="absolute inset-0 border-4 border-blue-500 rounded-full border-t-transparent animate-spin"></div>
                         </div>
-                        <span className="font-black uppercase tracking-[0.3em] text-[10px] text-zinc-500">Carregando Escalações...</span>
+                        <span className="font-bold text-sm text-zinc-400">Carregando Escalações...</span>
                     </div>
                 ) : lineups ? (
                     <div className="w-full max-w-full md:max-w-6xl mx-auto">
                         <SoccerField lineups={lineups} onSelectPlayer={addPlayer} />
                     </div>
                 ) : (
-                    <div className="text-center text-red-400 py-20 font-black uppercase text-xs tracking-widest bg-red-500/5 rounded-3xl border border-red-500/10">
+                    <div className="text-center text-red-400 py-20 font-bold text-sm bg-red-500/10 rounded-2xl border border-red-500/20 shadow-sm">
                         ⚠️ Escalação indisponível
                     </div>
                 )}
@@ -1622,33 +1653,59 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
   // --- Renderização condicional (após todos os hooks) ---
 
   if (!isAuthReady) {
-    return <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-100">Carregando...</div>;
+    return <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] text-zinc-100">Carregando...</div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] text-zinc-100 p-6">
+        <div className="w-20 h-20 bg-blue-500/10 rounded-3xl flex items-center justify-center mb-6 border border-blue-500/20 shadow-lg">
+            <svg viewBox="0 0 24 24" width="36" height="36" xmlns="http://www.w3.org/2000/svg">
+                <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
+                    <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"/>
+                    <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z"/>
+                    <path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z"/>
+                    <path fill="#EA4335" d="M -14.754 45.859 C -13.064 45.859 -11.534 46.449 -10.344 47.589 L -6.744 43.989 C -8.834 42.039 -11.514 40.859 -14.754 40.859 C -19.444 40.859 -23.494 43.559 -25.464 47.479 L -21.484 50.569 C -20.534 47.719 -17.884 45.859 -14.754 45.859 Z"/>
+                </g>
+            </svg>
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight mb-3 text-white">Bem-vindo ao LiveMatch</h1>
+        <p className="text-zinc-400 text-center max-w-sm mb-10 text-sm leading-relaxed font-medium">Faça login com sua conta Google para sincronizar seus jogadores e configurações.</p>
+        
+        <button 
+          onClick={handleGoogleLogin}
+          className="w-full max-w-sm py-4 bg-white hover:bg-zinc-200 text-black font-bold rounded-xl transition-all active:scale-95 shadow-lg flex items-center justify-center gap-3 text-sm"
+        >
+          Entrar com Google
+        </button>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen font-sans bg-zinc-950 text-zinc-100 selection:bg-emerald-500/30 pb-24 md:pb-0">
+    <div className="min-h-screen font-sans bg-[#0a0a0a] text-zinc-100 selection:bg-blue-600/30 pb-24 md:pb-0">
         
         {updateAvailable && (
             <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in zoom-in-95 duration-200">
-                <div className="bg-zinc-900 w-full max-w-sm rounded-[2.5rem] border border-emerald-500/30 p-8 text-center shadow-2xl ring-1 ring-emerald-500/20 relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-emerald-600"></div>
-                    <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mb-6 mx-auto ring-1 ring-emerald-500/20">
-                        <Download size={32} className="text-emerald-500" />
+                <div className="bg-[#121212] w-full max-w-sm rounded-[2rem] border border-white/10 p-6 text-center shadow-2xl relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-emerald-500"></div>
+                    <div className="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center mb-5 mx-auto border border-blue-500/20">
+                        <Download size={28} className="text-blue-500" />
                     </div>
-                    <h3 className="text-2xl font-black uppercase text-white mb-3 tracking-tight">Nova Atualização!</h3>
-                    <p className="text-sm text-zinc-400 mb-8 leading-relaxed px-4">Uma nova versão do aplicativo está disponível com melhorias e correções.</p>
+                    <h3 className="text-xl font-bold text-white mb-2 tracking-tight">Nova Atualização!</h3>
+                    <p className="text-sm text-zinc-400 mb-6 leading-relaxed px-2 font-medium">Uma nova versão do aplicativo está disponível com melhorias e correções.</p>
                     <div className="flex flex-col gap-3">
                         <button 
                             onClick={handleUpdate}
                             disabled={isUpdating}
-                            className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase rounded-2xl transition-colors text-xs tracking-widest shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors text-sm shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isUpdating ? `Atualizando... ${updateProgress}%` : 'Instalar Atualização'}
                         </button>
                         <button 
                             onClick={() => setUpdateAvailable(false)} 
                             disabled={isUpdating}
-                            className="w-full py-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-black uppercase rounded-2xl transition-colors text-xs tracking-widest disabled:opacity-50"
+                            className="w-full py-3.5 bg-[#1e1e1e] hover:bg-[#2a2a2a] text-zinc-300 font-bold rounded-xl transition-colors text-sm disabled:opacity-50"
                         >
                             Lembrar Mais Tarde
                         </button>
@@ -1658,44 +1715,84 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
         )}
 
         <div className="fixed top-6 right-6 z-[100] pointer-events-none flex flex-col items-end gap-3">
-            {toasts.map(t => (<div key={t.id} className="bg-emerald-500 text-black px-6 py-3 rounded-2xl shadow-2xl font-black text-xs uppercase tracking-wide border border-white/20 flex items-center gap-3 animate-in slide-in-from-right-10 fade-in duration-300"><Activity size={16} strokeWidth={3} />{t.msg}</div>))}
+            {toasts.map(t => (<div key={t.id} className="bg-blue-600 text-white px-5 py-3 rounded-xl shadow-lg font-bold text-sm border border-blue-500 flex items-center gap-3 animate-in slide-in-from-right-10 fade-in duration-300"><Activity size={16} strokeWidth={2.5} />{t.msg}</div>))}
         </div>
 
         {isHelpOpen && renderHelpModal()}
         {selectedPlayerDetails && <PlayerDetailsModal player={selectedPlayerDetails} onClose={() => setSelectedPlayerDetails(null)} />}
         {isSettingsOpen && (
-             <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-xl flex items-end md:items-center justify-center p-4 animate-in fade-in duration-300 safe-area-bottom">
-                 <div className="bg-zinc-900/90 w-full max-w-sm rounded-[2.5rem] border border-white/10 p-8 relative shadow-2xl ring-1 ring-white/5">
-                    <div className="flex justify-between items-center mb-8">
-                        <h3 className="text-xl font-black uppercase text-white tracking-tight">Configurações</h3>
-                        <button onClick={() => setIsSettingsOpen(false)} className="bg-white/5 p-2 rounded-full text-zinc-400 hover:text-white transition-colors"><X size={20}/></button>
+             <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-end md:items-center justify-center p-4 animate-in fade-in duration-300 safe-area-bottom">
+                 <div className="bg-[#121212] w-full max-w-sm rounded-[2rem] border border-white/10 p-6 relative shadow-2xl">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-bold text-white tracking-tight">Configurações</h3>
+                        <button onClick={() => setIsSettingsOpen(false)} className="bg-[#1e1e1e] p-2 rounded-full text-zinc-400 hover:text-white hover:bg-[#2a2a2a] transition-colors"><X size={20}/></button>
                     </div>
-                    <div className="space-y-6">
-                        <div className="bg-black/20 p-5 rounded-3xl border border-white/5">
+                    <div className="space-y-4">
+                        <div className="bg-[#1e1e1e] p-5 rounded-2xl border border-white/5">
                             <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Intervalo de Varredura</span>
-                                <span className="text-xl font-black text-emerald-400 font-mono">{intervalTime}s</span>
+                                <span className="text-sm font-bold text-zinc-300">Intervalo de Varredura</span>
+                                <span className="text-lg font-bold text-blue-400 font-mono">{intervalTime}s</span>
                             </div>
-                            <div className="text-[9px] text-zinc-600 font-bold uppercase mb-4 tracking-tighter">
+                            <div className="text-[10px] text-zinc-500 font-medium mb-4">
                                 {intervalTime >= 60 ? '✅ Recomendado para Segundo Plano' : '⚠️ Pode ser pausado pelo sistema'}
                             </div>
-                            <input type="range" min="10" max="120" step="5" value={intervalTime} onChange={(e) => setIntervalTime(Number(e.target.value))} className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
+                            <input type="range" min="10" max="120" step="5" value={intervalTime} onChange={(e) => setIntervalTime(Number(e.target.value))} className="w-full h-1.5 bg-[#2a2a2a] rounded-lg appearance-none cursor-pointer accent-blue-500" />
                         </div>
-                        <button onClick={() => setIsMuted(!isMuted)} className={`w-full p-5 rounded-3xl border flex items-center justify-between transition-all active:scale-[0.98] ${isMuted ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-zinc-800/50 border-white/5 text-zinc-300 hover:bg-zinc-800'}`}>
-                            <div className="flex items-center gap-4">
-                                <div className={`p-3 rounded-2xl ${isMuted ? 'bg-red-500/20' : 'bg-zinc-700/50'}`}>{isMuted ? <VolumeX size={20}/> : <Volume2 size={20}/>}</div>
+                        <button onClick={() => setIsMuted(!isMuted)} className={`w-full p-4 rounded-2xl border flex items-center justify-between transition-all active:scale-[0.98] ${isMuted ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-[#1e1e1e] border-white/5 text-zinc-300 hover:bg-[#2a2a2a]'}`}>
+                            <div className="flex items-center gap-3">
+                                <div className={`p-2.5 rounded-xl ${isMuted ? 'bg-red-500/20' : 'bg-[#2a2a2a]'}`}>{isMuted ? <VolumeX size={18}/> : <Volume2 size={18}/>}</div>
                                 <div className="text-left">
-                                    <div className="text-sm font-bold uppercase tracking-wide">Sons de Alerta</div>
-                                    <div className="text-[10px] opacity-60 font-medium mt-0.5">{isMuted ? 'Desativado' : 'Ativado'}</div>
+                                    <div className="text-sm font-bold">Sons de Alerta</div>
+                                    <div className="text-[10px] opacity-70 font-medium mt-0.5">{isMuted ? 'Desativado' : 'Ativado'}</div>
                                 </div>
                             </div>
-                            <div className={`w-12 h-7 rounded-full p-1 transition-colors ${isMuted ? 'bg-zinc-700' : 'bg-emerald-500'}`}>
-                                <div className={`w-5 h-5 bg-white rounded-full shadow-md transition-transform ${isMuted ? 'translate-x-0' : 'translate-x-5'}`} />
+                            <div className={`w-10 h-6 rounded-full p-1 transition-colors ${isMuted ? 'bg-[#2a2a2a]' : 'bg-blue-500'}`}>
+                                <div className={`w-4 h-4 bg-white rounded-full shadow-md transition-transform ${isMuted ? 'translate-x-0' : 'translate-x-4'}`} />
                             </div>
                         </button>
                         <div className="grid grid-cols-2 gap-3">
-                             <button onClick={handleSendTestNotification} className="flex-1 p-4 rounded-2xl bg-zinc-800/50 border border-white/5 text-zinc-300 flex items-center justify-center gap-2 font-bold uppercase text-[10px] tracking-widest hover:bg-zinc-800 transition-colors"><Bell size={16}/> Testar</button>
-                             <button onClick={() => setIsHelpOpen(true)} className="flex-1 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center gap-2 font-bold uppercase text-[10px] tracking-widest hover:bg-emerald-500/20 transition-colors"><BellOff size={16}/> Ajuda</button>
+                             <button onClick={handleSendTestNotification} className="flex-1 p-3.5 rounded-xl bg-[#1e1e1e] border border-white/5 text-zinc-300 flex items-center justify-center gap-2 font-bold text-xs hover:bg-[#2a2a2a] transition-colors"><Bell size={16}/> Testar</button>
+                             <button onClick={() => setIsHelpOpen(true)} className="flex-1 p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center gap-2 font-bold text-xs hover:bg-blue-500/20 transition-colors"><BellOff size={16}/> Ajuda</button>
+                        </div>
+                        
+                        <div className="mt-6 pt-6 border-t border-white/10">
+                            <div className="text-center mb-4">
+                                <h4 className="text-sm font-bold text-white mb-1">Conta e Sincronização</h4>
+                                <p className="text-[10px] text-zinc-400">Faça login para sincronizar seus jogadores monitorados entre o celular e o computador.</p>
+                            </div>
+                            
+                            {user && !user.isAnonymous ? (
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-3 bg-[#1e1e1e] p-3 rounded-xl border border-white/5">
+                                        {user.photoURL ? (
+                                            <img src={user.photoURL} alt="Avatar" className="w-10 h-10 rounded-full" referrerPolicy="no-referrer" />
+                                        ) : (
+                                            <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold">
+                                                {user.email?.charAt(0).toUpperCase() || 'U'}
+                                            </div>
+                                        )}
+                                        <div className="flex-1 overflow-hidden">
+                                            <div className="text-sm font-bold text-white truncate">{user.displayName || 'Usuário'}</div>
+                                            <div className="text-[10px] text-zinc-400 truncate">{user.email}</div>
+                                        </div>
+                                    </div>
+                                    <button onClick={handleLogout} className="w-full p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 font-bold text-sm hover:bg-red-500/20 transition-colors">
+                                        Sair da Conta
+                                    </button>
+                                </div>
+                            ) : (
+                                <button onClick={handleGoogleLogin} className="w-full p-3 rounded-xl bg-white text-black font-bold text-sm hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2">
+                                    <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
+                                        <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
+                                            <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"/>
+                                            <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z"/>
+                                            <path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z"/>
+                                            <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z"/>
+                                        </g>
+                                    </svg>
+                                    Entrar com Google
+                                </button>
+                            )}
                         </div>
                     </div>
                  </div>
@@ -1703,47 +1800,63 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
         )}
         {isClearConfirmOpen && (
              <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in zoom-in-95 duration-200">
-                <div className="bg-zinc-900 w-full max-w-sm rounded-[2.5rem] border border-zinc-800 p-8 text-center shadow-2xl">
-                    <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-6 mx-auto ring-1 ring-red-500/20">
-                        <Trash2 size={32} className="text-red-500" />
+                <div className="bg-[#121212] w-full max-w-sm rounded-[2rem] border border-white/10 p-6 text-center shadow-2xl">
+                    <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mb-5 mx-auto border border-red-500/20">
+                        <Trash2 size={28} className="text-red-500" />
                     </div>
-                    <h3 className="text-2xl font-black uppercase text-white mb-3 tracking-tight">Limpar Radar?</h3>
-                    <p className="text-sm text-zinc-400 mb-8 leading-relaxed px-4">Isso removerá todos os jogadores da sua lista de monitoramento atual.</p>
+                    <h3 className="text-xl font-bold text-white mb-2 tracking-tight">Limpar Radar?</h3>
+                    <p className="text-sm text-zinc-400 mb-6 leading-relaxed px-2 font-medium">Isso removerá todos os jogadores da sua lista de monitoramento atual.</p>
                     <div className="flex gap-3">
-                        <button onClick={() => setIsClearConfirmOpen(false)} className="flex-1 py-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-black uppercase rounded-2xl transition-colors text-xs tracking-widest">Cancelar</button>
-                        <button onClick={() => { setIsMonitoring(false); setPlayers([]); setIsClearConfirmOpen(false); }} className="flex-1 py-4 bg-red-500 hover:bg-red-600 text-white font-black uppercase rounded-2xl transition-colors text-xs tracking-widest shadow-lg shadow-red-900/20">Limpar Tudo</button>
+                        <button onClick={() => setIsClearConfirmOpen(false)} className="flex-1 py-3.5 bg-[#1e1e1e] hover:bg-[#2a2a2a] text-zinc-300 font-bold rounded-xl transition-colors text-sm">Cancelar</button>
+                        <button onClick={async () => { 
+                            setIsMonitoring(false); 
+                            setIsClearConfirmOpen(false);
+                            if (user) {
+                                try {
+                                    const q = query(collection(db, `users/${user.uid}/monitoredPlayers`));
+                                    const snapshot = await getDocs(q);
+                                    snapshot.forEach(async (d) => {
+                                        await deleteDoc(doc(db, `users/${user.uid}/monitoredPlayers`, d.id));
+                                    });
+                                } catch (error) {
+                                    handleFirestoreError(error, OperationType.DELETE, `users/${user.uid}/monitoredPlayers`);
+                                }
+                            } else {
+                                setPlayers([]);
+                            }
+                        }} className="flex-1 py-3.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-colors text-sm shadow-lg">Limpar Tudo</button>
                     </div>
                 </div>
              </div>
         )}
 
-        <div className="w-full max-w-7xl mx-auto min-h-screen relative bg-zinc-950 md:border-x md:border-zinc-800/50 shadow-2xl">
-            <main className="min-h-screen pb-safe-bottom">
+        <div className="w-full max-w-7xl mx-auto min-h-screen relative bg-[#0a0a0a] md:border-x md:border-zinc-800/50 shadow-2xl flex flex-col">
+            <main className="flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))]">
                 {activeTab === 'monitor' && renderMonitor()}
                 {activeTab === 'search' && renderSearch()}
                 {activeTab === 'logs' && (
-                    <div className="pb-32 px-6 pt-24 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className="flex items-center justify-between mb-8">
+                    <div className="px-6 pt-24 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="flex items-center justify-between mb-8 max-w-7xl mx-auto">
                             <div className="flex items-center gap-4">
-                                <h2 className="font-black text-3xl uppercase text-white tracking-tighter">Live Log</h2>
+                                <h2 className="text-2xl font-bold text-white tracking-tight">Live Log</h2>
                                 {logs.length > 0 && (
                                     <button 
                                         onClick={() => { setLogs([]); addToast('Logs limpos', 'success'); }} 
-                                        className="p-2 bg-zinc-800 rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors active:scale-95" 
+                                        className="p-2 bg-[#1e1e1e] rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors active:scale-95 shadow-sm" 
                                         title="Limpar Logs"
                                     >
                                         <Trash2 size={18} />
                                     </button>
                                 )}
                             </div>
-                            <span className="text-xs font-bold text-zinc-500 bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800">{logs.length} Eventos</span>
+                            <span className="text-xs font-bold text-zinc-400 bg-[#1e1e1e] px-3 py-1 rounded-lg border border-white/5 shadow-sm">{logs.length} Eventos</span>
                         </div>
-                        <div className="space-y-3">
+                        <div className="space-y-3 max-w-7xl mx-auto">
                             {logs.map(log => (
-                                <div key={log.id} className={`p-4 rounded-2xl border flex items-start gap-3 transition-all hover:scale-[1.01] ${log.type === 'success' ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-100' : 'bg-zinc-900/50 border-zinc-800 text-zinc-400'}`}>
-                                    <div className={`mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 ${log.type === 'success' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-zinc-600'}`} />
+                                <div key={log.id} className={`p-4 rounded-xl border flex items-start gap-3 transition-all hover:scale-[1.01] shadow-sm ${log.type === 'success' ? 'bg-blue-500/10 border-blue-500/20 text-blue-100' : 'bg-[#1e1e1e] border-white/5 text-zinc-300'}`}>
+                                    <div className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${log.type === 'success' ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'bg-zinc-500'}`} />
                                     <div className="flex-1">
-                                        <div className="text-[10px] font-mono opacity-50 mb-1 tracking-wider">{log.time}</div>
+                                        <div className="text-[10px] font-mono font-bold text-zinc-500 mb-1">{log.time}</div>
                                         <div className="text-sm font-medium leading-snug">{log.message}</div>
                                     </div>
                                 </div>
@@ -1753,30 +1866,34 @@ const PlayerDetailsModal: React.FC<PlayerDetailsModalProps> = ({ player, onClose
                 )}
             </main>
             
-            {/* Floating Navigation Bar */}
-            <nav className="fixed bottom-8 left-0 right-0 z-50 safe-area-bottom pointer-events-none flex justify-center px-6">
-                <div className="bg-zinc-900/80 backdrop-blur-2xl border border-white/10 p-2 rounded-[2.5rem] shadow-2xl shadow-black/50 flex justify-between w-full max-w-[360px] pointer-events-auto ring-1 ring-white/5">
-                    {['monitor', 'search', 'logs'].map((id) => (
-                        <button 
-                            key={id} 
-                            onClick={() => setActiveTab(id as any)} 
-                            className={`flex items-center justify-center gap-2 py-4 px-6 rounded-[2rem] transition-all duration-300 relative overflow-hidden group ${activeTab === id ? 'flex-[1.5]' : 'flex-1'}`}
-                        >
-                            {activeTab === id && <div className="absolute inset-0 bg-emerald-500 opacity-10" />}
-                            <div className={`relative z-10 transition-colors duration-300 ${activeTab === id ? 'text-emerald-400' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
-                                {id === 'monitor' ? <LayoutDashboard size={24} strokeWidth={activeTab === id ? 2.5 : 2} /> : 
-                                 id === 'search' ? <Search size={24} strokeWidth={activeTab === id ? 2.5 : 2} /> : 
-                                 <List size={24} strokeWidth={activeTab === id ? 2.5 : 2} />}
-                            </div>
-                            {activeTab === id && (
-                                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 animate-in fade-in slide-in-from-left-2 duration-300 whitespace-nowrap">
-                                    {id === 'monitor' ? 'Radar' : id === 'search' ? 'Buscar' : 'Logs'}
-                                </span>
-                            )}
-                        </button>
-                    ))}
+            {/* Premium Bottom Navigation Bar */}
+            <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none">
+                <div className="max-w-7xl mx-auto px-4 pb-[env(safe-area-inset-bottom)] pt-4">
+                    <nav className="pointer-events-auto bg-[#1a1a1a]/80 backdrop-blur-2xl border border-white/10 shadow-2xl rounded-2xl mb-4 mx-auto max-w-md overflow-hidden">
+                        <div className="flex justify-around items-center h-16 px-2">
+                            {['monitor', 'search', 'logs'].map((id) => (
+                                <button 
+                                    key={id} 
+                                    onClick={() => setActiveTab(id as any)} 
+                                    className={`relative flex flex-col items-center justify-center w-full h-full gap-1 transition-all duration-300 ${activeTab === id ? 'text-blue-400' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'}`}
+                                >
+                                    {activeTab === id && (
+                                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-blue-500 rounded-b-full shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
+                                    )}
+                                    <div className={`transition-transform duration-300 ${activeTab === id ? '-translate-y-0.5' : ''}`}>
+                                        {id === 'monitor' ? <LayoutDashboard size={22} strokeWidth={activeTab === id ? 2.5 : 2} /> : 
+                                         id === 'search' ? <Search size={22} strokeWidth={activeTab === id ? 2.5 : 2} /> : 
+                                         <List size={22} strokeWidth={activeTab === id ? 2.5 : 2} />}
+                                    </div>
+                                    <span className={`text-[10px] font-bold tracking-wide transition-all duration-300 ${activeTab === id ? 'opacity-100' : 'opacity-70'}`}>
+                                        {id === 'monitor' ? 'Radar' : id === 'search' ? 'Buscar' : 'Logs'}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </nav>
                 </div>
-            </nav>
+            </div>
         </div>
 
     </div>

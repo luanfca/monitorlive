@@ -6,20 +6,15 @@ service cloud.firestore {
     // Assumed Data Model
     // ===============================================================
     //
-    // Collection: subscriptions
-    // Document ID: auto-generated
+    // Collection: users/{userId}/monitoredPlayers
+    // Document ID: {playerId}
     // Fields:
-    //   - userId: string (required) - ID of the user
-    //   - gameId: string (required) - ID of the game
-    //   - alerts: map (optional) - Alert preferences
-    //
-    // Collection: notifications
-    // Document ID: auto-generated
-    // Fields:
-    //   - gameId: string (required) - ID of the game
-    //   - message: string (required) - Notification message
-    //   - timestamp: timestamp (required) - When it occurred
-    //   - type: string (required) - Type of notification
+    //   - id: number (required)
+    //   - sofaId: number (required)
+    //   - name: string (required)
+    //   - eventId: number (required)
+    //   - alerts: map (required)
+    //   - createdAt: timestamp (optional)
     //
     // ===============================================================
 
@@ -35,23 +30,24 @@ service cloud.firestore {
        return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function hasRequiredFields(fields) {
-       return request.resource.data.keys().hasAll(fields);
-    }
-
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
+    function isValidMonitoredPlayer(data) {
+      return data.keys().hasAll(['id', 'sofaId', 'name', 'eventId', 'alerts']) &&
+             data.id is number &&
+             data.sofaId is number &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.eventId is number &&
+             data.alerts is map;
     }
 
     // ===============================================================
     // Rules
     // ===============================================================
 
-    match /subscriptions/{subscriptionId} {
-      allow read: if isAuthenticated() && isOwner(request.auth.uid);
-      allow create: if isAuthenticated() && isOwner(request.resource.data.userId) && hasRequiredFields(['userId', 'gameId']);
-      allow update: if isAuthenticated() && isOwner(resource.data.userId) && isOwner(request.resource.data.userId);
-      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+    match /users/{userId}/monitoredPlayers/{playerId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidMonitoredPlayer(request.resource.data);
+      allow update: if isOwner(userId) && isValidMonitoredPlayer(request.resource.data);
+      allow delete: if isOwner(userId);
     }
 
     match /notifications/{notificationId} {

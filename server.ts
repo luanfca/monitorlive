@@ -1,9 +1,8 @@
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { startMonitor, updateClientMonitor } from './server/monitor.js';
+import { startMonitor, updateClientMonitor, runMonitorCheck } from './server/monitor.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const distPath = path.join(process.cwd(), 'dist');
 
 async function startServer() {
   const app = express();
@@ -16,12 +15,19 @@ async function startServer() {
 
   // Endpoint para atualizar os jogadores monitorados pelo cliente
   app.post('/api/update-monitor', (req, res) => {
-    const { token, players } = req.body;
+    const { token, players, userId } = req.body;
     if (!token || !Array.isArray(players)) {
         return res.status(400).json({ error: 'Invalid payload' });
     }
-    updateClientMonitor(token, players);
+    updateClientMonitor(token, players, userId);
     res.json({ status: 'monitoring updated' });
+  });
+
+  // Endpoint de cron para manter o servidor acordado e forçar a checagem
+  app.get('/api/cron', async (req, res) => {
+    console.log('Cron job acionado. Executando checagem...');
+    await runMonitorCheck();
+    res.json({ status: 'success', message: 'Monitor check executed' });
   });
 
   // Endpoint para enviar notificacao de teste
@@ -93,8 +99,6 @@ async function startServer() {
         headers
       });
 
-      console.log(`SofaScore API response status: ${response.status} for ${url}`);
-
       if (!response.ok) {
         if (response.status === 404) {
             return res.status(404).json({ error: 'Not found' });
@@ -110,7 +114,6 @@ async function startServer() {
 
       // Buffer the response to check if it's empty
       const buffer = await response.arrayBuffer();
-      console.log(`Response size: ${buffer.byteLength} bytes`);
       
       if (buffer.byteLength === 0) {
           console.warn(`Empty response from ${url}`);
@@ -175,14 +178,26 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     // Serve static files in production
-    app.use(express.static(path.join(__dirname, 'dist')));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    app.use(express.static(distPath));
+    app.get('*all', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    
+    // Inicia um "cron job interno" para rodar a cada 60 segundos
+    // Isso ajuda a manter a checagem funcionando enquanto o servidor estiver acordado,
+    // já que serviços externos (como cron-job.org) são bloqueados pela tela de proteção do AI Studio.
+    setInterval(async () => {
+      console.log('[Internal Cron] Executando checagem automática...');
+      try {
+        await runMonitorCheck();
+      } catch (error) {
+        console.error('[Internal Cron] Erro na checagem:', error);
+      }
+    }, 60000);
   });
 }
 
