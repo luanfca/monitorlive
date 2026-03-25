@@ -79,6 +79,11 @@ jobs:
           cd android
           bash gradlew assembleDebug
 
+      - name: Print SHA-1 Fingerprint (For Firebase)
+        run: |
+          cd android
+          bash gradlew signingReport
+
       - name: Rename APK
         run: mv android/app/build/outputs/apk/debug/app-debug.apk app-release.apk
 
