@@ -11,7 +11,8 @@ import { Game, MonitoredPlayer, LogEntry, PlayerStats, GameLineups, GamePlayer }
 import * as api from './services/sofaService';
 import { getMessaging, getToken, onMessage, deleteToken } from 'firebase/messaging';
 import { auth, db } from './services/firebase';
-import { onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithPopup, signOut, signInWithCredential } from 'firebase/auth';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { collection, onSnapshot, query, where, orderBy, limit, doc, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import SoccerField from './components/SoccerField';
 
@@ -966,8 +967,18 @@ const App: React.FC = () => {
 
   const handleGoogleLogin = async () => {
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      if (Capacitor.isNativePlatform()) {
+        const result = await FirebaseAuthentication.signInWithGoogle();
+        if (result.credential?.idToken) {
+          const credential = GoogleAuthProvider.credential(result.credential.idToken);
+          await signInWithCredential(auth, credential);
+        } else {
+          throw new Error('No ID token returned from Google Sign-In');
+        }
+      } else {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+      }
       addToast('Login realizado com sucesso!', 'success');
       setIsSettingsOpen(false);
     } catch (error) {
