@@ -34,7 +34,8 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
                         }
                         return json;
                     } catch (e) {
-                        return null;
+                        console.warn(`Proxy ${proxyUrl} returned invalid JSON, trying next...`);
+                        continue;
                     }
                 }
             }
@@ -169,35 +170,37 @@ export const runMonitorCheck = async () => {
                     tackles: 0, fouls: 0, foulsDrawn: 0, shotsTotal: 0, shotsOnTarget: 0, yellowCards: 0, redCards: 0, isSubstitute: false, goals: 0, assists: 0, interceptions: 0, duelsWon: 0
                 };
 
+                const alerts = p.alerts || {};
+
                 // Compare and generate alerts
-                if (p.alerts.tackles && currentStats.tackles > last.tackles) {
+                if (alerts.tackles && currentStats.tackles > last.tackles) {
                     updates.push(`Desarme! ${p.name} (${currentStats.tackles})`);
                 }
-                if (p.alerts.fouls && currentStats.fouls > last.fouls) {
+                if (alerts.fouls && currentStats.fouls > last.fouls) {
                     updates.push(`Falta Cometida! ${p.name} (${currentStats.fouls})`);
                 }
-                if (p.alerts.foulsDrawn && currentStats.foulsDrawn > last.foulsDrawn) {
+                if (alerts.foulsDrawn && currentStats.foulsDrawn > last.foulsDrawn) {
                     updates.push(`Falta Sofrida! ${p.name} (${currentStats.foulsDrawn})`);
                 }
-                if (p.alerts.shots && currentStats.shotsTotal > last.shotsTotal) {
+                if (alerts.shots && currentStats.shotsTotal > last.shotsTotal) {
                     updates.push(`Finalização! ${p.name} (${currentStats.shotsTotal})`);
                 }
-                if (p.alerts.shotsOn && currentStats.shotsOnTarget > last.shotsOnTarget) {
+                if (alerts.shotsOn && currentStats.shotsOnTarget > last.shotsOnTarget) {
                     updates.push(`Finalização no Alvo! ${p.name} (${currentStats.shotsOnTarget})`);
                 }
-                if (p.alerts.yellow && currentStats.yellowCards > last.yellowCards) {
+                if (alerts.yellow && currentStats.yellowCards > last.yellowCards) {
                     updates.push(`🟨 Cartão Amarelo! ${p.name}`);
                 }
-                if (p.alerts.red && currentStats.redCards > last.redCards) {
+                if (alerts.red && currentStats.redCards > last.redCards) {
                     updates.push(`🟥 Cartão Vermelho! ${p.name}`);
                 }
-                if (p.alerts.goals && currentStats.goals > last.goals) {
+                if (alerts.goals && currentStats.goals > last.goals) {
                     updates.push(`⚽ GOL! ${p.name}`);
                 }
-                if (p.alerts.assists && currentStats.assists > last.assists) {
+                if (alerts.assists && currentStats.assists > last.assists) {
                     updates.push(`👟 Assistência! ${p.name}`);
                 }
-                if (p.alerts.subOut && currentStats.isSubstitute && !last.isSubstitute) {
+                if (alerts.subOut && currentStats.isSubstitute && !last.isSubstitute) {
                     updates.push(`🔄 Substituído! ${p.name} saiu do jogo.`);
                 }
 

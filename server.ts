@@ -115,7 +115,8 @@ async function startServer() {
                           }
                           return json;
                       } catch (e) {
-                          return null;
+                          console.warn(`Proxy ${proxyUrl} returned invalid JSON, trying next...`);
+                          continue;
                       }
                   }
               }

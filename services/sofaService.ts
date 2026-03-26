@@ -28,10 +28,13 @@ const isNative = (): boolean => {
 // Usamos uma referência segura para o env para garantir acesso correto no Vite
 const env = (import.meta as any).env || {};
 // Use o Shared App URL como proxy para evitar problemas de CORS no Web Worker no Android.
-// No ambiente Web (Preview/Browser), use o caminho relativo '' para bater no próprio servidor local.
+// No ambiente Web (Preview/Browser), use o caminho relativo '' para bater no próprio servidor local,
+// ou a URL do backend se estiver configurada (ex: deploy separado no Render).
+const DEFAULT_BACKEND_URL = 'https://live-match-pro-api.onrender.com';
+
 export const API_BASE = isNative() 
-    ? (env.VITE_API_BASE || 'https://ais-pre-sbbbqotd5lm2damzkmizak-17720903248.us-west2.run.app')
-    : '';
+    ? (env.VITE_API_BASE || env.VITE_API_URL || DEFAULT_BACKEND_URL)
+    : (env.VITE_API_URL || (window.location.hostname.includes('onrender.com') ? DEFAULT_BACKEND_URL : ''));
 
 // Debug para verificar conexão em produção
 console.log('BACKEND URL:', API_BASE);

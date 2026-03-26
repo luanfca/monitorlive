@@ -196,7 +196,7 @@ const GameCard = React.memo(({ game, onClick, isMonitored, onToggleMonitor }: Ga
   );
 });
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://live-match-pro-api.onrender.com';
+const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 const App: React.FC = () => {
   let messaging: any = null;
