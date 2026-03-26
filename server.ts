@@ -6,7 +6,18 @@ const distPath = path.join(process.cwd(), 'dist');
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
+
+  // Add CORS headers for all routes
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
 
   app.use(express.json());
 
@@ -62,17 +73,6 @@ async function startServer() {
             res.status(500).json({ error: 'Failed to send notification' });
         }
     }
-  });
-
-  // Add CORS headers for proxy
-  app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-    if (req.method === 'OPTIONS') {
-      return res.sendStatus(200);
-    }
-    next();
   });
 
   // Stub for push subscription
@@ -184,7 +184,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT as number, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
     
     // Inicia um "cron job interno" para rodar a cada 60 segundos

@@ -286,6 +286,30 @@ const fetchBackendData = async (endpoint: string) => {
         const url = `${API_BASE}${endpoint}${endpoint.includes('?') ? '&' : '?'}${timestamp}`;
         logService.addLog('info', `Web Fetch (Proxy): ${url}`);
         
+        // Mapeamento de Endpoints para URL Real do SofaScore (para fallback)
+        let directUrl = '';
+        if (endpoint === '/live') {
+            directUrl = 'https://api.sofascore.app/api/v1/sport/football/events/live';
+        } else if (endpoint.startsWith('/lineups/')) {
+            const id = endpoint.split('/')[2];
+            directUrl = `https://api.sofascore.app/api/v1/event/${id}/lineups`;
+        } else if (endpoint.startsWith('/player/')) {
+            const parts = endpoint.split('/');
+            const eventId = parts[2];
+            const playerId = parts[3];
+            directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/statistics`;
+        } else if (endpoint.startsWith('/heatmap/')) {
+             const parts = endpoint.split('/');
+             const eventId = parts[2];
+             const playerId = parts[3];
+             directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/heatmap`;
+        } else if (endpoint.startsWith('/sport/football/scheduled-events/')) {
+            const date = endpoint.split('/').pop();
+            directUrl = `https://api.sofascore.app/api/v1/sport/football/scheduled-events/${date}`;
+        } else {
+            directUrl = `https://api.sofascore.app/api/v1${endpoint}`;
+        }
+
         try {
             const response = await fetch(url);
             if (!response.ok) {
@@ -298,8 +322,13 @@ const fetchBackendData = async (endpoint: string) => {
             if (!text) return null;
             return JSON.parse(text);
         } catch (error) {
-            logService.addLog('error', 'Local proxy failed in Web Mode', error);
-            return null;
+            logService.addLog('error', 'Local proxy failed in Web Mode, falling back to Public Proxies', error);
+            try {
+                return await fetchWithProxies(directUrl);
+            } catch (proxyError) {
+                logService.addLog('error', 'All proxies failed in Web Fallback', proxyError);
+                return null;
+            }
         }
     }
   } catch (error) {

@@ -196,6 +196,8 @@ const GameCard = React.memo(({ game, onClick, isMonitored, onToggleMonitor }: Ga
   );
 });
 
+const API_URL = import.meta.env.VITE_API_URL || 'https://live-match-pro-api.onrender.com';
+
 const App: React.FC = () => {
   let messaging: any = null;
   try {
@@ -362,7 +364,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (fcmToken) {
-      fetch('/api/update-monitor', {
+      fetch(`${API_URL}/api/update-monitor`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -859,7 +861,7 @@ const App: React.FC = () => {
         return;
     }
     try {
-        const response = await fetch('/api/test-notification', {
+        const response = await fetch(`${API_URL}/api/test-notification`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: fcmToken })

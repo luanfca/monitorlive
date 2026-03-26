@@ -1,5 +1,55 @@
 import { messaging } from './firebaseAdmin.js';
 
+const PROXY_PROVIDERS = [
+    (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
+    (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+    (url: string) => `https://proxy.cors.sh/${url}`,
+    (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+];
+
+const fetchWithProxies = async (targetUrl: string): Promise<any> => {
+    const shuffledProxies = [...PROXY_PROVIDERS].sort(() => Math.random() - 0.5);
+    
+    for (const proxyGen of shuffledProxies) {
+        const proxyUrl = proxyGen(targetUrl);
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+            const response = await fetch(proxyUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Cache-Control': 'no-cache',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                },
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+                const text = await response.text();
+                if (text) {
+                    try {
+                        const json = JSON.parse(text);
+                        if (json.contents) {
+                            return JSON.parse(json.contents);
+                        }
+                        return json;
+                    } catch (e) {
+                        return null;
+                    }
+                }
+            }
+        } catch (error) {
+            // Ignore and try next proxy
+        }
+    }
+    return null;
+};
+
 interface ClientMonitor {
   token: string;
   userId?: string; // Add userId to link multiple devices
@@ -56,7 +106,8 @@ export const runMonitorCheck = async () => {
         const eventLineups: Record<number, any> = {};
         for (const eventId of eventIds) {
             try {
-                const response = await fetch(`https://api.sofascore.app/api/v1/event/${eventId}/lineups`, {
+                const directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/lineups`;
+                const response = await fetch(directUrl, {
                     headers: { 
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                         'Referer': 'https://www.sofascore.com/',
@@ -67,6 +118,12 @@ export const runMonitorCheck = async () => {
                     const text = await response.text();
                     if (text) {
                         eventLineups[eventId] = JSON.parse(text);
+                    }
+                } else if (response.status === 403) {
+                    console.log(`Direct fetch failed with 403 for event ${eventId}, trying proxies...`);
+                    const proxyData = await fetchWithProxies(directUrl);
+                    if (proxyData) {
+                        eventLineups[eventId] = proxyData;
                     }
                 }
             } catch (e) {
