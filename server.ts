@@ -6,9 +6,9 @@ const distPath = path.join(process.cwd(), 'dist');
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = 3000;
 
-  // Add CORS headers for all routes
+  // Add CORS headers for proxy
   app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -184,7 +184,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT as number, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
     
     // Inicia um "cron job interno" para rodar a cada 60 segundos
