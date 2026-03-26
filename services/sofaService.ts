@@ -109,15 +109,10 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
         
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // Timeout reduzido para 10s para girar mais rápido
+            const timeoutId = setTimeout(() => controller.abort(), 15000); // Timeout ajustado para 15s
 
             const response = await fetch(proxyUrl, {
                 method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'Cache-Control': 'no-cache',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                },
                 signal: controller.signal
             });
 

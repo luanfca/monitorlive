@@ -12,7 +12,7 @@ async function startServer() {
   app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Cache-Control');
     if (req.method === 'OPTIONS') {
       return res.sendStatus(200);
     }
@@ -81,6 +81,51 @@ async function startServer() {
     res.json({ status: 'success' });
   });
 
+  const PROXY_PROVIDERS = [
+      (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+      (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
+      (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+      (url: string) => `https://proxy.cors.sh/${url}`,
+      (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+  ];
+
+  const fetchWithProxies = async (targetUrl: string): Promise<any> => {
+      const shuffledProxies = [...PROXY_PROVIDERS].sort(() => Math.random() - 0.5);
+      
+      for (const proxyGen of shuffledProxies) {
+          const proxyUrl = proxyGen(targetUrl);
+          try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+              const response = await fetch(proxyUrl, {
+                  method: 'GET',
+                  signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+
+              if (response.ok) {
+                  const text = await response.text();
+                  if (text) {
+                      try {
+                          const json = JSON.parse(text);
+                          if (json.contents) {
+                              return JSON.parse(json.contents);
+                          }
+                          return json;
+                      } catch (e) {
+                          return null;
+                      }
+                  }
+              }
+          } catch (error) {
+              // Ignore and try next proxy
+          }
+      }
+      return null;
+  };
+
   const fetchSofa = async (url: string, res: express.Response, req?: express.Request) => {
     try {
       console.log(`Proxying request to: ${url}`);
@@ -103,6 +148,15 @@ async function startServer() {
         if (response.status === 404) {
             return res.status(404).json({ error: 'Not found' });
         }
+        
+        if (response.status === 403) {
+            console.log(`Direct fetch failed with 403 for ${url}, trying proxies from backend...`);
+            const proxyData = await fetchWithProxies(url);
+            if (proxyData) {
+                return res.json(proxyData);
+            }
+        }
+
         console.error(`SofaScore API error: ${response.status} for ${url}`);
         return res.status(response.status).json({ error: `SofaScore API error: ${response.status}` });
       }
