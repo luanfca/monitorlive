@@ -142,17 +142,13 @@ async function startServer() {
       });
 
       if (!response.ok) {
-        if (response.status === 404) {
-            return res.status(404).json({ error: 'Not found' });
-        }
-        
-        if (response.status === 403) {
-            console.log(`Direct fetch failed with 403 for ${url}, trying proxies from backend...`);
+        if (response.status === 404 || response.status === 403) {
+            console.log(`Direct fetch failed with ${response.status} for ${url}, trying proxies from backend...`);
             const proxyData = await fetchWithProxies(url);
             if (proxyData) {
                 return res.json(proxyData);
             } else {
-                return res.status(404).json({ error: 'Proxy fetch failed' });
+                return res.status(response.status).json({ error: 'Proxy fetch failed' });
             }
         }
 
