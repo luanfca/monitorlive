@@ -7,7 +7,7 @@ const distPath = path.join(process.cwd(), 'dist');
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
 
   // Add CORS headers for proxy
   app.use(cors({
