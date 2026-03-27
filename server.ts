@@ -147,19 +147,37 @@ async function startServer() {
     try {
       console.log(`Proxying request to: ${url}`);
       const headers: HeadersInit = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://www.sofascore.com/',
-        'Origin': 'https://www.sofascore.com',
-        'Accept': 'application/json, text/plain, */*'
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"macOS"',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-site'
       };
 
       if (req && req.headers['accept']) {
           headers['Accept'] = req.headers['accept'];
       }
 
-      const response = await fetch(url, {
-        headers
-      });
+      let response = await fetch(url, { headers });
+
+      // Se falhar com 403, tenta com o domínio alternativo (.com ou .app)
+      if (!response.ok && response.status === 403) {
+          const altUrl = url.includes('.app') ? url.replace('.app', '.com') : url.replace('.com', '.app');
+          console.log(`403 received, trying alternative domain: ${altUrl}`);
+          headers['Origin'] = 'https://www.sofascore.com';
+          headers['Referer'] = 'https://www.sofascore.com/';
+          response = await fetch(altUrl, { headers });
+          
+          if (response.ok) {
+              url = altUrl; // Atualiza a URL para o log
+          }
+      }
 
       if (!response.ok) {
         if (response.status === 404 || response.status === 403) {
@@ -168,6 +186,13 @@ async function startServer() {
             if (proxyData) {
                 return res.json(proxyData);
             } else {
+                // Tenta com o domínio alternativo nos proxies também
+                const altUrl = url.includes('.app') ? url.replace('.app', '.com') : url.replace('.com', '.app');
+                console.log(`Proxies failed, trying proxies with alternative domain: ${altUrl}`);
+                const proxyDataAlt = await fetchWithProxies(altUrl);
+                if (proxyDataAlt) {
+                    return res.json(proxyDataAlt);
+                }
                 return res.status(response.status).json({ error: 'Proxy fetch failed' });
             }
         }
