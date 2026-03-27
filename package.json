@@ -30,6 +30,7 @@
     "@capacitor/preferences": "^8.0.1",
     "@capacitor/push-notifications": "^8.0.2",
     "@capgo/capacitor-updater": "^8.43.8",
+    "cors": "^2.8.6",
     "express": "^5.2.1",
     "firebase": "^12.10.0",
     "firebase-admin": "^13.7.0",
@@ -40,6 +41,7 @@
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.1.0",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^20.11.0",
     "@types/react": "^18.2.43",

@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import cors from 'cors';
 import { startMonitor, updateClientMonitor, runMonitorCheck } from './server/monitor.js';
 
 const distPath = path.join(process.cwd(), 'dist');
@@ -9,15 +10,11 @@ async function startServer() {
   const PORT = 3000;
 
   // Add CORS headers for proxy
-  app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Cache-Control');
-    if (req.method === 'OPTIONS') {
-      return res.sendStatus(200);
-    }
-    next();
-  });
+  app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Cache-Control']
+  }));
 
   app.use(express.json());
 
@@ -155,6 +152,8 @@ async function startServer() {
             const proxyData = await fetchWithProxies(url);
             if (proxyData) {
                 return res.json(proxyData);
+            } else {
+                return res.status(404).json({ error: 'Proxy fetch failed' });
             }
         }
 
