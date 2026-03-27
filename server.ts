@@ -106,9 +106,29 @@ async function startServer() {
                   if (text) {
                       try {
                           const json = JSON.parse(text);
-                          if (json.contents) {
-                              return JSON.parse(json.contents);
+                          
+                          // Handle allorigins.win/get format
+                          if (json.status && json.status.http_code) {
+                              if (json.status.http_code >= 400) {
+                                  console.warn(`Proxy ${proxyUrl} returned http_code ${json.status.http_code}, trying next...`);
+                                  continue;
+                              }
                           }
+                          
+                          if (json.contents) {
+                              const parsedContents = JSON.parse(json.contents);
+                              if (parsedContents.error) {
+                                  console.warn(`Proxy ${proxyUrl} returned API error, trying next...`);
+                                  continue;
+                              }
+                              return parsedContents;
+                          }
+                          
+                          if (json.error) {
+                              console.warn(`Proxy ${proxyUrl} returned API error, trying next...`);
+                              continue;
+                          }
+                          
                           return json;
                       } catch (e) {
                           console.warn(`Proxy ${proxyUrl} returned invalid JSON, trying next...`);
@@ -165,8 +185,13 @@ async function startServer() {
       const buffer = await response.arrayBuffer();
       
       if (buffer.byteLength === 0) {
-          console.warn(`Empty response from ${url}`);
-          return res.status(204).end();
+          console.warn(`Empty response from ${url}, trying proxies from backend...`);
+          const proxyData = await fetchWithProxies(url);
+          if (proxyData) {
+              return res.json(proxyData);
+          } else {
+              return res.status(204).end();
+          }
       }
 
       res.send(Buffer.from(buffer));

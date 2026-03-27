@@ -142,10 +142,28 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
                 const text = await response.text();
                 try {
                     const data = JSON.parse(text);
+                    
                     // Tratamento especial para AllOrigins /get (retorna JSON com contents)
-                    if (proxyUrl.includes('api.allorigins.win/get') && data.contents) {
-                        return JSON.parse(data.contents);
+                    if (proxyUrl.includes('api.allorigins.win/get')) {
+                        if (data.status && data.status.http_code >= 400) {
+                            logService.addLog('warn', `Proxy returned http_code ${data.status.http_code}`);
+                            continue;
+                        }
+                        if (data.contents) {
+                            const parsedContents = JSON.parse(data.contents);
+                            if (parsedContents.error) {
+                                logService.addLog('warn', 'Proxy returned API error');
+                                continue;
+                            }
+                            return parsedContents;
+                        }
                     }
+                    
+                    if (data.error) {
+                        logService.addLog('warn', 'Proxy returned API error');
+                        continue;
+                    }
+                    
                     return data;
                 } catch (parseError) {
                     logService.addLog('warn', 'Proxy returned invalid JSON', parseError);
