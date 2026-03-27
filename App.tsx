@@ -196,7 +196,11 @@ const GameCard = React.memo(({ game, onClick, isMonitored, onToggleMonitor }: Ga
   );
 });
 
-const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+let configuredApiUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+if (configuredApiUrl.includes('live-match-pro-api.onrender.com')) {
+    configuredApiUrl = '';
+}
+const API_URL = configuredApiUrl;
 
 const App: React.FC = () => {
   let messaging: any = null;

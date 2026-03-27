@@ -25,19 +25,32 @@ const isNative = (): boolean => {
 };
 
 // Configuração da Base URL (Prioridade para Variável de Ambiente, Fallback para Produção)
-// Usamos uma referência segura para o env para garantir acesso correto no Vite
-const env = (import.meta as any).env || {};
 // Use o Shared App URL como proxy para evitar problemas de CORS no Web Worker no Android.
 // No ambiente Web (Preview/Browser), use o caminho relativo '' para bater no próprio servidor local,
 // ou a URL do backend se estiver configurada (ex: deploy separado no Render).
-const DEFAULT_BACKEND_URL = 'https://live-match-pro-api.onrender.com';
+const DEFAULT_BACKEND_URL = 'https://monitorlive-7rv3.onrender.com';
+
+// Vite replaces import.meta.env.VITE_API_URL statically during build.
+// We must access it directly, not through a dynamic object, so it works in production.
+let configuredApiUrl = '';
+try {
+    // @ts-ignore
+    configuredApiUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE || '';
+} catch (e) {
+    // Ignore error if import.meta is not available
+}
+
+// Force ignore the dead backend URL
+if (configuredApiUrl && configuredApiUrl.includes('live-match-pro-api.onrender.com')) {
+    configuredApiUrl = '';
+}
 
 export const API_BASE = isNative() 
-    ? (env.VITE_API_BASE || env.VITE_API_URL || DEFAULT_BACKEND_URL)
-    : (env.VITE_API_URL || (window.location.hostname.includes('onrender.com') ? DEFAULT_BACKEND_URL : ''));
+    ? (configuredApiUrl || DEFAULT_BACKEND_URL)
+    : configuredApiUrl;
 
 // Debug para verificar conexão em produção
-console.log('BACKEND URL:', API_BASE);
+console.log('BACKEND URL:', API_BASE || 'Local (Relative)');
 // console.log('PLATFORM:', Capacitor.getPlatform()); // Removed to avoid worker crash
 
 // Helper to normalize strings for comparison
@@ -121,7 +134,9 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
 
             clearTimeout(timeoutId);
 
-            if (response.status === 404) return null; 
+            if (!response.ok) {
+                throw new Error(`Proxy error: ${response.status}`);
+            }
 
             if (response.ok) {
                 const text = await response.text();
@@ -282,7 +297,6 @@ const fetchBackendData = async (endpoint: string) => {
         // Em ambiente de desenvolvimento/web, usamos o servidor local (server.ts)
         // ou o Shared App URL que atua como proxy para o SofaScore.
         const url = `${API_BASE}${endpoint}${endpoint.includes('?') ? '&' : '?'}${timestamp}`;
-        logService.addLog('info', `Web Fetch (Proxy): ${url}`);
         
         // Mapeamento de Endpoints para URL Real do SofaScore (para fallback)
         let directUrl = '';
@@ -308,10 +322,22 @@ const fetchBackendData = async (endpoint: string) => {
             directUrl = `https://api.sofascore.app/api/v1${endpoint}`;
         }
 
+        // Try direct fetch first (SofaScore allows CORS for some endpoints)
+        try {
+            logService.addLog('info', `Web Fetch (Direct): ${directUrl}`);
+            const directResponse = await fetch(directUrl);
+            if (directResponse.ok) {
+                const text = await directResponse.text();
+                if (text) return JSON.parse(text);
+            }
+        } catch (e) {
+            logService.addLog('warn', 'Direct web fetch failed, falling back to proxy...', e);
+        }
+
+        logService.addLog('info', `Web Fetch (Proxy): ${url}`);
         try {
             const response = await fetch(url);
             if (!response.ok) {
-                if (response.status === 404) return null;
                 throw new Error(`Local proxy error: ${response.status}`);
             }
             if (response.status === 204) return null;
