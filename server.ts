@@ -79,21 +79,20 @@ async function startServer() {
 
   const PROXY_PROVIDERS = [
       (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-      (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-      (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
       (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-      (url: string) => `https://proxy.cors.sh/${url}`,
       (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
   ];
 
   const fetchWithProxies = async (targetUrl: string): Promise<any> => {
-      const shuffledProxies = [...PROXY_PROVIDERS].sort(() => Math.random() - 0.5);
+      // Don't shuffle, use the most reliable ones first
+      const proxies = [...PROXY_PROVIDERS];
       
-      for (const proxyGen of shuffledProxies) {
+      for (const proxyGen of proxies) {
           const proxyUrl = proxyGen(targetUrl);
           try {
               const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 15000);
+              // Reduce timeout to 4 seconds to fail fast
+              const timeoutId = setTimeout(() => controller.abort(), 4000);
 
               const response = await fetch(proxyUrl, {
                   method: 'GET',
@@ -146,18 +145,12 @@ async function startServer() {
   const fetchSofa = async (url: string, res: express.Response, req?: express.Request) => {
     try {
       console.log(`Proxying request to: ${url}`);
+      // Try Native App Headers first - these often bypass Cloudflare better than fake browser headers
       const headers: HeadersInit = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.9',
+        'User-Agent': 'SofaScore/14.4.0 (Android 13; SM-G998B)',
+        'Accept': 'application/json',
         'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"macOS"',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-site'
+        'Connection': 'keep-alive'
       };
 
       if (req && req.headers['accept']) {
@@ -166,13 +159,27 @@ async function startServer() {
 
       let response = await fetch(url, { headers });
 
-      // Se falhar com 403, tenta com o domínio alternativo (.com ou .app)
+      // Se falhar com 403, tenta com o domínio alternativo (.com ou .app) e headers de navegador
       if (!response.ok && response.status === 403) {
           const altUrl = url.includes('.app') ? url.replace('.app', '.com') : url.replace('.com', '.app');
-          console.log(`403 received, trying alternative domain: ${altUrl}`);
-          headers['Origin'] = 'https://www.sofascore.com';
-          headers['Referer'] = 'https://www.sofascore.com/';
-          response = await fetch(altUrl, { headers });
+          console.log(`403 received, trying alternative domain with browser headers: ${altUrl}`);
+          
+          const browserHeaders: HeadersInit = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cache-Control': 'no-cache',
+            'Origin': 'https://www.sofascore.com',
+            'Referer': 'https://www.sofascore.com/',
+            'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-site'
+          };
+
+          response = await fetch(altUrl, { headers: browserHeaders });
           
           if (response.ok) {
               url = altUrl; // Atualiza a URL para o log

@@ -101,14 +101,9 @@ export const getPlayerHeatmapPoints = async (eventId: number, playerId: number):
 const PROXY_PROVIDERS = [
     // 1. CorsProxy.io (Geralmente o mais rápido)
     (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    // 2. AllOrigins (Raw) - Bom backup
-    (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    // 3. ThingProxy - Outra alternativa
-    (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
-    // 4. AllOrigins (JSON) - Caso o Raw falhe (tratamento especial no fetch)
+    // 2. AllOrigins (JSON) - Caso o Raw falhe (tratamento especial no fetch)
     (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-    // 5. Adicionando mais opções para contornar bloqueios
-    (url: string) => `https://proxy.cors.sh/${url}`, // Pode requerer header, mas vale tentar
+    // 3. CodeTabs - Outra alternativa
     (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
 ];
 
@@ -116,16 +111,16 @@ const PROXY_PROVIDERS = [
 const fetchWithProxies = async (targetUrl: string): Promise<any> => {
     let lastError;
     
-    // Embaralha a lista de proxies para não tentar sempre na mesma ordem
-    const shuffledProxies = [...PROXY_PROVIDERS].sort(() => Math.random() - 0.5);
+    // Não embaralha mais, tenta os mais confiáveis primeiro
+    const proxies = [...PROXY_PROVIDERS];
     
-    for (const proxyGen of shuffledProxies) {
+    for (const proxyGen of proxies) {
         const proxyUrl = proxyGen(targetUrl);
         logService.addLog('info', `Trying Proxy: ${proxyUrl}`);
         
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000); // Timeout ajustado para 15s
+            const timeoutId = setTimeout(() => controller.abort(), 4000); // Timeout ajustado para 4s para falhar rápido
 
             const response = await fetch(proxyUrl, {
                 method: 'GET',
