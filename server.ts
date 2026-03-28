@@ -91,8 +91,8 @@ async function startServer() {
           const proxyUrl = proxyGen(targetUrl);
           try {
               const controller = new AbortController();
-              // Reduce timeout to 4 seconds to fail fast
-              const timeoutId = setTimeout(() => controller.abort(), 4000);
+              // Increase timeout to 8 seconds
+              const timeoutId = setTimeout(() => controller.abort(), 8000);
 
               const response = await fetch(proxyUrl, {
                   method: 'GET',
@@ -145,67 +145,82 @@ async function startServer() {
   const fetchSofa = async (url: string, res: express.Response, req?: express.Request) => {
     try {
       console.log(`Proxying request to: ${url}`);
-      // Try Native App Headers first - these often bypass Cloudflare better than fake browser headers
-      const headers: HeadersInit = {
-        'User-Agent': 'SofaScore/14.4.0 (Android 13; SM-G998B)',
-        'Accept': 'application/json',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
-      };
+      
+      const urlsToTry = [
+          url,
+          url.includes('.app') ? url.replace('.app', '.com') : url.replace('.com', '.app'),
+          url.replace('api.sofascore.app', 'www.sofascore.com').replace('api.sofascore.com', 'www.sofascore.com')
+      ];
 
-      if (req && req.headers['accept']) {
-          headers['Accept'] = req.headers['accept'];
-      }
+      let response: Response | null = null;
+      let successfulUrl = url;
 
-      let response = await fetch(url, { headers });
-
-      // Se falhar com 403, tenta com o domínio alternativo (.com ou .app) e headers de navegador
-      if (!response.ok && response.status === 403) {
-          const altUrl = url.includes('.app') ? url.replace('.app', '.com') : url.replace('.com', '.app');
-          console.log(`403 received, trying alternative domain with browser headers: ${altUrl}`);
+      for (let i = 0; i < urlsToTry.length; i++) {
+          const currentUrl = urlsToTry[i];
+          console.log(`Trying URL ${i + 1}/${urlsToTry.length}: ${currentUrl}`);
           
-          const browserHeaders: HeadersInit = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Accept': '*/*',
-            'Accept-Language': 'en-US,en;q=0.9',
+          // Try Native App Headers first
+          const headers: HeadersInit = {
+            'User-Agent': 'SofaScore/14.4.0 (Android 13; SM-G998B)',
+            'Accept': 'application/json',
             'Cache-Control': 'no-cache',
-            'Origin': 'https://www.sofascore.com',
-            'Referer': 'https://www.sofascore.com/',
-            'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-            'Sec-Ch-Ua-Mobile': '?0',
-            'Sec-Ch-Ua-Platform': '"Windows"',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-site'
+            'Connection': 'keep-alive'
           };
 
-          response = await fetch(altUrl, { headers: browserHeaders });
-          
+          if (req && req.headers['accept']) {
+              headers['Accept'] = req.headers['accept'];
+          }
+
+          response = await fetch(currentUrl, { headers });
+
           if (response.ok) {
-              url = altUrl; // Atualiza a URL para o log
+              successfulUrl = currentUrl;
+              break;
+          }
+
+          // Se falhar com 403, tenta com headers de navegador
+          if (response.status === 403) {
+              console.log(`403 received, trying with browser headers: ${currentUrl}`);
+              
+              const browserHeaders: HeadersInit = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Cache-Control': 'no-cache',
+                'Origin': 'https://www.sofascore.com',
+                'Referer': 'https://www.sofascore.com/',
+                'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-site'
+              };
+
+              response = await fetch(currentUrl, { headers: browserHeaders });
+              
+              if (response.ok) {
+                  successfulUrl = currentUrl;
+                  break;
+              }
           }
       }
 
-      if (!response.ok) {
-        if (response.status === 404 || response.status === 403) {
-            console.log(`Direct fetch failed with ${response.status} for ${url}, trying proxies from backend...`);
-            const proxyData = await fetchWithProxies(url);
-            if (proxyData) {
-                return res.json(proxyData);
-            } else {
-                // Tenta com o domínio alternativo nos proxies também
-                const altUrl = url.includes('.app') ? url.replace('.app', '.com') : url.replace('.com', '.app');
-                console.log(`Proxies failed, trying proxies with alternative domain: ${altUrl}`);
-                const proxyDataAlt = await fetchWithProxies(altUrl);
-                if (proxyDataAlt) {
-                    return res.json(proxyDataAlt);
+      if (!response || !response.ok) {
+        if (response && (response.status === 404 || response.status === 403)) {
+            console.log(`Direct fetch failed with ${response.status}, trying proxies from backend...`);
+            
+            for (const proxyUrl of urlsToTry) {
+                console.log(`Trying proxies with URL: ${proxyUrl}`);
+                const proxyData = await fetchWithProxies(proxyUrl);
+                if (proxyData) {
+                    return res.json(proxyData);
                 }
-                return res.status(response.status).json({ error: 'Proxy fetch failed' });
             }
+            
+            return res.status(response.status).json({ error: `Failed to fetch data: ${response.statusText}` });
         }
-
-        console.error(`SofaScore API error: ${response.status} for ${url}`);
-        return res.status(response.status).json({ error: `SofaScore API error: ${response.status}` });
+        return res.status(response?.status || 500).json({ error: `Failed to fetch data` });
       }
 
       const contentType = response.headers.get('content-type');
@@ -217,13 +232,14 @@ async function startServer() {
       const buffer = await response.arrayBuffer();
       
       if (buffer.byteLength === 0) {
-          console.warn(`Empty response from ${url}, trying proxies from backend...`);
-          const proxyData = await fetchWithProxies(url);
-          if (proxyData) {
-              return res.json(proxyData);
-          } else {
-              return res.status(204).end();
+          console.warn(`Empty response from ${successfulUrl}, trying proxies from backend...`);
+          for (const proxyUrl of urlsToTry) {
+              const proxyData = await fetchWithProxies(proxyUrl);
+              if (proxyData) {
+                  return res.json(proxyData);
+              }
           }
+          return res.status(204).end();
       }
 
       res.send(Buffer.from(buffer));
