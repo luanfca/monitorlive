@@ -99,10 +99,8 @@ async function startServer() {
               const response = await fetch(proxyUrl, {
                   method: 'GET',
                   headers: {
-                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                      'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
                       'Accept': 'application/json, text/plain, */*',
-                      'Origin': 'https://www.sofascore.com',
-                      'Referer': 'https://www.sofascore.com/',
                       'Cache-Control': 'no-cache'
                   },
                   signal: controller.signal
@@ -189,24 +187,32 @@ async function startServer() {
 
           // Se falhar com 403, tenta com headers de navegador
           if (response.status === 403) {
-              console.log(`403 received, trying with browser headers: ${currentUrl}`);
+              console.log(`403 received, trying with Googlebot headers: ${currentUrl}`);
               
               const browserHeaders: HeadersInit = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Accept': '*/*',
+                'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                'Accept': 'application/json, text/plain, */*',
                 'Accept-Language': 'en-US,en;q=0.9',
                 'Cache-Control': 'no-cache',
-                'Origin': 'https://www.sofascore.com',
-                'Referer': 'https://www.sofascore.com/',
-                'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-                'Sec-Ch-Ua-Mobile': '?0',
-                'Sec-Ch-Ua-Platform': '"Windows"',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-site'
+                'Connection': 'keep-alive'
               };
 
               response = await fetch(currentUrl, { headers: browserHeaders });
+              
+              if (response.ok) {
+                  successfulUrl = currentUrl;
+                  break;
+              }
+              
+              // Tenta Googlebot Smartphone
+              console.log(`Still failing, trying Googlebot Smartphone: ${currentUrl}`);
+              const mobileHeaders: HeadersInit = {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                'Accept': 'application/json, text/plain, */*',
+                'Cache-Control': 'no-cache'
+              };
+              
+              response = await fetch(currentUrl, { headers: mobileHeaders });
               
               if (response.ok) {
                   successfulUrl = currentUrl;
@@ -319,7 +325,7 @@ async function startServer() {
   app.listen(port, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${port} (Production mode: ${process.env.NODE_ENV === 'production'})`);
     
-    // Inicia um "cron job interno" para rodar a cada 60 segundos (mantém o servidor acordado)
+    // Inicia um "cron job interno" para rodar a cada 60 segundos (mantém o servidor acordado e checando)
     // Isso ajuda a manter a checagem funcionando enquanto o servidor estiver acordado,
     // já que serviços externos (como cron-job.org) são bloqueados pela tela de proteção do AI Studio.
     setInterval(async () => {
