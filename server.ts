@@ -18,7 +18,9 @@ async function startServer() {
   app.use(express.json());
 
   // Inicia o monitor de jogos
-  startMonitor();
+  if (process.env.ENABLE_MONITOR === 'true') {
+    startMonitor();
+  }
 
   // Endpoint para atualizar os jogadores monitorados pelo cliente
   app.post('/api/update-monitor', (req, res) => {
@@ -316,7 +318,7 @@ async function startServer() {
   } else {
     // Serve static files in production
     app.use(express.static(distPath));
-    app.get('*all', (req, res) => {
+    app.get('/{*splat}', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
@@ -328,14 +330,16 @@ async function startServer() {
     // Inicia um "cron job interno" para rodar a cada 60 segundos (mantém o servidor acordado e checando)
     // Isso ajuda a manter a checagem funcionando enquanto o servidor estiver acordado,
     // já que serviços externos (como cron-job.org) são bloqueados pela tela de proteção do AI Studio.
-    setInterval(async () => {
-      console.log('[Internal Cron] Executando checagem automática...');
-      try {
-        await runMonitorCheck();
-      } catch (error) {
-        console.error('[Internal Cron] Erro na checagem:', error);
-      }
-    }, 60000);
+    if (process.env.ENABLE_MONITOR === 'true') {
+      setInterval(async () => {
+        console.log('[Internal Cron] Executando checagem automática...');
+        try {
+          await runMonitorCheck();
+        } catch (error) {
+          console.error('[Internal Cron] Erro na checagem:', error);
+        }
+      }, 60000);
+    }
   });
 }
 
