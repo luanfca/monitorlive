@@ -99,12 +99,12 @@ export const getPlayerHeatmapPoints = async (eventId: number, playerId: number):
 
 // Lista de Proxies Públicos para Rotação (Web / Fallback)
 const PROXY_PROVIDERS = [
-    // 1. CorsProxy.io (Geralmente o mais rápido)
-    (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    // 2. AllOrigins (JSON) - Caso o Raw falhe (tratamento especial no fetch)
+    // 1. AllOrigins (JSON) - Most reliable fallback
     (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-    // 3. CodeTabs - Outra alternativa
-    (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+    // 2. CorsProxy.io
+    (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    // 3. CorsProxy.org
+    (url: string) => `https://corsproxy.org/?${encodeURIComponent(url)}`
 ];
 
 // Helper para tentar buscar via múltiplos proxies
@@ -120,7 +120,7 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
         
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000); // Timeout ajustado para 4s para falhar rápido
+            const timeoutId = setTimeout(() => controller.abort(), 8000); // Timeout ajustado para 8s
 
             const response = await fetch(proxyUrl, {
                 method: 'GET',
