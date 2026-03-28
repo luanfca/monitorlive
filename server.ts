@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import cors from 'cors';
 import { startMonitor, updateClientMonitor, runMonitorCheck } from './server/monitor.js';
+import { gotScraping } from 'got-scraping';
 
 const distPath = path.join(process.cwd(), 'dist');
 
@@ -179,102 +180,32 @@ async function startServer() {
           const currentUrl = urlsToTry[i];
           console.log(`Trying URL ${i + 1}/${urlsToTry.length}: ${currentUrl}`);
           
-          // Try Native App Headers first
-          const headers: HeadersInit = {
-            'User-Agent': 'SofaScore/14.4.0 (Android 13; SM-G998B)',
-            'Accept': 'application/json',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive'
-          };
-
-          if (req && req.headers['accept']) {
-              headers['Accept'] = req.headers['accept'];
-          }
-
-          response = await fetch(currentUrl, { headers });
-
-          if (response.ok) {
-              successfulUrl = currentUrl;
-              break;
-          }
-
-          // Se falhar com 403, tenta com headers de navegador
-          if (response.status === 403) {
-              console.log(`403 received, trying with browser headers: ${currentUrl}`);
+          try {
+              const gotResponse = await gotScraping({
+                  url: currentUrl,
+                  responseType: 'json',
+                  timeout: { request: 10000 }
+              });
               
-              const browserHeaders: HeadersInit = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'Referer': 'https://www.sofascore.com/',
-                'Origin': 'https://www.sofascore.com'
-              };
-
-              response = await fetch(currentUrl, { headers: browserHeaders });
-              
-              if (response.ok) {
-                  successfulUrl = currentUrl;
-                  break;
+              if (gotResponse.statusCode >= 200 && gotResponse.statusCode < 300) {
+                  return res.json(gotResponse.body);
               }
-              
-              // Tenta Mobile
-              console.log(`Still failing, trying Mobile headers: ${currentUrl}`);
-              const mobileHeaders: HeadersInit = {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
-                'Accept': 'application/json, text/plain, */*',
-                'Cache-Control': 'no-cache',
-                'Referer': 'https://www.sofascore.com/',
-                'Origin': 'https://www.sofascore.com'
-              };
-              
-              response = await fetch(currentUrl, { headers: mobileHeaders });
-              
-              if (response.ok) {
-                  successfulUrl = currentUrl;
-                  break;
-              }
+          } catch (e: any) {
+              console.log(`gotScraping failed for ${currentUrl}: ${e.message}`);
           }
       }
 
-      if (!response || !response.ok) {
-        if (response && (response.status === 404 || response.status === 403)) {
-            console.log(`Direct fetch failed with ${response.status}, trying proxies from backend...`);
-            
-            for (const proxyUrl of urlsToTry) {
-                console.log(`Trying proxies with URL: ${proxyUrl}`);
-                const proxyData = await fetchWithProxies(proxyUrl);
-                if (proxyData) {
-                    return res.json(proxyData);
-                }
-            }
-            
-            return res.status(response.status).json({ error: `Failed to fetch data: ${response.statusText}` });
-        }
-        return res.status(response?.status || 500).json({ error: `Failed to fetch data` });
-      }
-
-      const contentType = response.headers.get('content-type');
-      if (contentType) {
-        res.setHeader('Content-Type', contentType);
-      }
-
-      // Buffer the response to check if it's empty
-      const buffer = await response.arrayBuffer();
+      console.log(`Direct fetch failed, trying proxies from backend...`);
       
-      if (buffer.byteLength === 0) {
-          console.warn(`Empty response from ${successfulUrl}, trying proxies from backend...`);
-          for (const proxyUrl of urlsToTry) {
-              const proxyData = await fetchWithProxies(proxyUrl);
-              if (proxyData) {
-                  return res.json(proxyData);
-              }
+      for (const proxyUrl of urlsToTry) {
+          console.log(`Trying proxies with URL: ${proxyUrl}`);
+          const proxyData = await fetchWithProxies(proxyUrl);
+          if (proxyData) {
+              return res.json(proxyData);
           }
-          return res.status(204).end();
       }
-
-      res.send(Buffer.from(buffer));
+      
+      return res.status(500).json({ error: `Failed to fetch data` });
     } catch (error) {
       console.error('Proxy error:', error);
       res.status(500).json({ error: 'Proxy error' });

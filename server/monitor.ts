@@ -1,4 +1,5 @@
 import { messaging } from './firebaseAdmin.js';
+import { gotScraping } from 'got-scraping';
 
 const PROXY_PROVIDERS = [
     (url: string) => `https://corsproxy.org/?${encodeURIComponent(url)}`,
@@ -17,6 +18,22 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
         targetUrl.replace('api.sofascore.app', 'api.sofascore.com'),
         targetUrl.replace('api.sofascore.app', 'www.sofascore.com')
     ];
+    
+    for (const domainUrl of domainsToTry) {
+        try {
+            const gotResponse = await gotScraping({
+                url: domainUrl,
+                responseType: 'json',
+                timeout: { request: 10000 }
+            });
+            
+            if (gotResponse.statusCode >= 200 && gotResponse.statusCode < 300) {
+                return gotResponse.body;
+            }
+        } catch (e: any) {
+            console.log(`gotScraping failed for ${domainUrl}: ${e.message}`);
+        }
+    }
     
     for (const domainUrl of domainsToTry) {
       for (const proxyGen of proxies) {
