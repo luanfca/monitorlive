@@ -2,6 +2,7 @@ import { messaging } from './firebaseAdmin.js';
 import { gotScraping } from 'got-scraping';
 
 const PROXY_PROVIDERS = [
+    (url: string) => `https://api.allorigins.hexlet.app/get?url=${encodeURIComponent(url)}`,
     (url: string) => `https://corsproxy.org/?${encodeURIComponent(url)}`,
     (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
@@ -23,12 +24,16 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
         try {
             const gotResponse = await gotScraping({
                 url: domainUrl,
-                responseType: 'json',
-                timeout: { request: 10000 }
+                responseType: 'text',
+                timeout: { request: 10000 },
+                headers: {
+                    'Referer': 'https://www.sofascore.com/',
+                    'Origin': 'https://www.sofascore.com'
+                }
             });
             
             if (gotResponse.statusCode >= 200 && gotResponse.statusCode < 300) {
-                return gotResponse.body;
+                return JSON.parse(gotResponse.body);
             }
         } catch (e: any) {
             console.log(`gotScraping failed for ${domainUrl}: ${e.message}`);

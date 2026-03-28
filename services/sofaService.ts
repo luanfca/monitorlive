@@ -99,6 +99,7 @@ export const getPlayerHeatmapPoints = async (eventId: number, playerId: number):
 
 // Lista de Proxies Públicos para Rotação (Web / Fallback)
 const PROXY_PROVIDERS = [
+    (url: string) => `https://api.allorigins.hexlet.app/get?url=${encodeURIComponent(url)}`,
     (url: string) => `https://corsproxy.org/?${encodeURIComponent(url)}`,
     (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
@@ -147,7 +148,7 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
                     const data = JSON.parse(text);
                     
                     // Tratamento especial para AllOrigins /get (retorna JSON com contents)
-                    if (proxyUrl.includes('api.allorigins.win/get')) {
+                    if (proxyUrl.includes('api.allorigins.win/get') || proxyUrl.includes('api.allorigins.hexlet.app/get')) {
                         if (data.status && data.status.http_code >= 400) {
                             logService.addLog('warn', `Proxy returned http_code ${data.status.http_code}`);
                             continue;

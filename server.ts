@@ -176,6 +176,7 @@ async function startServer() {
       let response: Response | null = null;
       let successfulUrl = url;
 
+      let lastError = '';
       for (let i = 0; i < urlsToTry.length; i++) {
           const currentUrl = urlsToTry[i];
           console.log(`Trying URL ${i + 1}/${urlsToTry.length}: ${currentUrl}`);
@@ -183,14 +184,19 @@ async function startServer() {
           try {
               const gotResponse = await gotScraping({
                   url: currentUrl,
-                  responseType: 'json',
-                  timeout: { request: 10000 }
+                  responseType: 'text',
+                  timeout: { request: 10000 },
+                  headers: {
+                      'Referer': 'https://www.sofascore.com/',
+                      'Origin': 'https://www.sofascore.com'
+                  }
               });
               
               if (gotResponse.statusCode >= 200 && gotResponse.statusCode < 300) {
-                  return res.json(gotResponse.body);
+                  return res.json(JSON.parse(gotResponse.body));
               }
           } catch (e: any) {
+              lastError = e.message;
               console.log(`gotScraping failed for ${currentUrl}: ${e.message}`);
           }
       }
@@ -205,7 +211,7 @@ async function startServer() {
           }
       }
       
-      return res.status(500).json({ error: `Failed to fetch data` });
+      return res.status(500).json({ error: `Failed to fetch data`, details: lastError });
     } catch (error) {
       console.error('Proxy error:', error);
       res.status(500).json({ error: 'Proxy error' });
