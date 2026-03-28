@@ -99,6 +99,7 @@ export const getPlayerHeatmapPoints = async (eventId: number, playerId: number):
 
 // Lista de Proxies Públicos para Rotação (Web / Fallback)
 const PROXY_PROVIDERS = [
+    (url: string) => `https://corsproxy.org/?${encodeURIComponent(url)}`,
     (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
     (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
@@ -110,12 +111,20 @@ const PROXY_PROVIDERS = [
 const fetchWithProxies = async (targetUrl: string): Promise<any> => {
     let lastError;
     
-    // Não embaralha mais, tenta os mais confiáveis primeiro
+    // Tenta domínios diferentes do SofaScore
+    const domainsToTry = [
+        targetUrl,
+        targetUrl.replace('api.sofascore.app', 'api.sofascore.com'),
+        targetUrl.replace('api.sofascore.app', 'www.sofascore.com')
+    ];
+    
     const proxies = [...PROXY_PROVIDERS];
     
-    for (const proxyGen of proxies) {
-        const proxyUrl = proxyGen(targetUrl);
-        logService.addLog('info', `Trying Proxy: ${proxyUrl}`);
+    for (const domainUrl of domainsToTry) {
+        logService.addLog('info', `Trying Domain: ${domainUrl}`);
+        for (const proxyGen of proxies) {
+            const proxyUrl = proxyGen(domainUrl);
+            logService.addLog('info', `Trying Proxy: ${proxyUrl}`);
         
         try {
             const controller = new AbortController();
@@ -171,7 +180,8 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
         
         // Pequeno delay antes de tentar o próximo
         await new Promise(resolve => setTimeout(resolve, 300));
-    }
+        } // End of proxies loop
+    } // End of domains loop
     
     throw lastError || new Error('All proxies failed');
 };
@@ -189,16 +199,16 @@ const fetchBackendData = async (endpoint: string) => {
         
         // Mapeamento de Endpoints para URL Real do SofaScore
         if (endpoint === '/live') {
-            directUrl = 'https://api.sofascore.app/api/v1/sport/football/events/live';
+            directUrl = 'https://api.sofascore.com/api/v1/sport/football/events/live';
         } else if (endpoint.startsWith('/lineups/')) {
             const id = endpoint.split('/')[2];
-            directUrl = `https://api.sofascore.app/api/v1/event/${id}/lineups`;
+            directUrl = `https://api.sofascore.com/api/v1/event/${id}/lineups`;
         } else if (endpoint.startsWith('/player/')) {
             // /player/:eventId/:playerId -> /event/:eventId/player/:playerId/statistics
             const parts = endpoint.split('/');
             const eventId = parts[2];
             const playerId = parts[3];
-            directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/statistics`;
+            directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/statistics`;
         } else if (endpoint.startsWith('/heatmap/')) {
              // /heatmap/:eventId/:playerId -> /event/:eventId/player/:playerId/heatmap
              const parts = endpoint.split('/');
@@ -206,16 +216,16 @@ const fetchBackendData = async (endpoint: string) => {
              const playerId = parts[3];
              // Check if it's /data
              if (parts[4] === 'data') {
-                 directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/heatmap`;
+                 directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/heatmap`;
              } else {
-                 directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/heatmap`;
+                 directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/heatmap`;
              }
         } else if (endpoint.startsWith('/sport/football/scheduled-events/')) {
             const date = endpoint.split('/').pop();
-            directUrl = `https://api.sofascore.app/api/v1/sport/football/scheduled-events/${date}`;
+            directUrl = `https://api.sofascore.com/api/v1/sport/football/scheduled-events/${date}`;
         } else {
             // Default fallback
-            directUrl = `https://api.sofascore.app/api/v1${endpoint}`;
+            directUrl = `https://api.sofascore.com/api/v1${endpoint}`;
         }
 
         logService.addLog('info', `Native Fetch: ${directUrl}`);
@@ -313,25 +323,25 @@ const fetchBackendData = async (endpoint: string) => {
         // Mapeamento de Endpoints para URL Real do SofaScore (para fallback)
         let directUrl = '';
         if (endpoint === '/live') {
-            directUrl = 'https://api.sofascore.app/api/v1/sport/football/events/live';
+            directUrl = 'https://api.sofascore.com/api/v1/sport/football/events/live';
         } else if (endpoint.startsWith('/lineups/')) {
             const id = endpoint.split('/')[2];
-            directUrl = `https://api.sofascore.app/api/v1/event/${id}/lineups`;
+            directUrl = `https://api.sofascore.com/api/v1/event/${id}/lineups`;
         } else if (endpoint.startsWith('/player/')) {
             const parts = endpoint.split('/');
             const eventId = parts[2];
             const playerId = parts[3];
-            directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/statistics`;
+            directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/statistics`;
         } else if (endpoint.startsWith('/heatmap/')) {
              const parts = endpoint.split('/');
              const eventId = parts[2];
              const playerId = parts[3];
-             directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/heatmap`;
+             directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/heatmap`;
         } else if (endpoint.startsWith('/sport/football/scheduled-events/')) {
             const date = endpoint.split('/').pop();
-            directUrl = `https://api.sofascore.app/api/v1/sport/football/scheduled-events/${date}`;
+            directUrl = `https://api.sofascore.com/api/v1/sport/football/scheduled-events/${date}`;
         } else {
-            directUrl = `https://api.sofascore.app/api/v1${endpoint}`;
+            directUrl = `https://api.sofascore.com/api/v1${endpoint}`;
         }
 
         // Try direct fetch first (SofaScore allows CORS for some endpoints)

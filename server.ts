@@ -80,6 +80,7 @@ async function startServer() {
   });
 
   const PROXY_PROVIDERS = [
+      (url: string) => `https://corsproxy.org/?${encodeURIComponent(url)}`,
       (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
       (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
       (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
@@ -91,12 +92,19 @@ async function startServer() {
       // Don't shuffle, use the most reliable ones first
       const proxies = [...PROXY_PROVIDERS];
       
-      for (const proxyGen of proxies) {
-          const proxyUrl = proxyGen(targetUrl);
-          try {
-              const controller = new AbortController();
-              // Increase timeout to 12 seconds
-              const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const domainsToTry = [
+          targetUrl,
+          targetUrl.replace('api.sofascore.app', 'api.sofascore.com'),
+          targetUrl.replace('api.sofascore.app', 'www.sofascore.com')
+      ];
+      
+      for (const domainUrl of domainsToTry) {
+        for (const proxyGen of proxies) {
+            const proxyUrl = proxyGen(domainUrl);
+            try {
+                const controller = new AbortController();
+                // Increase timeout to 12 seconds
+                const timeoutId = setTimeout(() => controller.abort(), 12000);
 
               const response = await fetch(proxyUrl, {
                   method: 'GET',
@@ -147,7 +155,8 @@ async function startServer() {
           } catch (error) {
               // Ignore and try next proxy
           }
-      }
+        } // End of proxies loop
+      } // End of domains loop
       return null;
   };
 

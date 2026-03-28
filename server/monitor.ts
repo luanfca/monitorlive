@@ -1,22 +1,29 @@
 import { messaging } from './firebaseAdmin.js';
 
 const PROXY_PROVIDERS = [
-    (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    (url: string) => `https://corsproxy.org/?${encodeURIComponent(url)}`,
     (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
     (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-    (url: string) => `https://proxy.cors.sh/${url}`,
-    (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+    (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`
 ];
 
 const fetchWithProxies = async (targetUrl: string): Promise<any> => {
-    const shuffledProxies = [...PROXY_PROVIDERS].sort(() => Math.random() - 0.5);
+    const proxies = [...PROXY_PROVIDERS];
     
-    for (const proxyGen of shuffledProxies) {
-        const proxyUrl = proxyGen(targetUrl);
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const domainsToTry = [
+        targetUrl,
+        targetUrl.replace('api.sofascore.app', 'api.sofascore.com'),
+        targetUrl.replace('api.sofascore.app', 'www.sofascore.com')
+    ];
+    
+    for (const domainUrl of domainsToTry) {
+      for (const proxyGen of proxies) {
+          const proxyUrl = proxyGen(domainUrl);
+          try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 15000);
 
             const response = await fetch(proxyUrl, {
                 method: 'GET',
@@ -67,7 +74,8 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
         } catch (error) {
             // Ignore and try next proxy
         }
-    }
+      } // End of proxies loop
+    } // End of domains loop
     return null;
 };
 
