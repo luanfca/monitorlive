@@ -308,7 +308,7 @@ async function startServer() {
 
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
   app.listen(port, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${port}`);
+    console.log(`Server running on http://0.0.0.0:${port} (Production mode: ${process.env.NODE_ENV === 'production'})`);
     
     // Inicia um "cron job interno" para rodar a cada 60 segundos
     // Isso ajuda a manter a checagem funcionando enquanto o servidor estiver acordado,
