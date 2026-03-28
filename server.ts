@@ -109,9 +109,11 @@ async function startServer() {
               const response = await fetch(proxyUrl, {
                   method: 'GET',
                   headers: {
-                      'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                       'Accept': 'application/json, text/plain, */*',
-                      'Cache-Control': 'no-cache'
+                      'Cache-Control': 'no-cache',
+                      'Referer': 'https://www.sofascore.com/',
+                      'Origin': 'https://www.sofascore.com'
                   },
                   signal: controller.signal
               });
@@ -198,14 +200,16 @@ async function startServer() {
 
           // Se falhar com 403, tenta com headers de navegador
           if (response.status === 403) {
-              console.log(`403 received, trying with Googlebot headers: ${currentUrl}`);
+              console.log(`403 received, trying with browser headers: ${currentUrl}`);
               
               const browserHeaders: HeadersInit = {
-                'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Accept': 'application/json, text/plain, */*',
                 'Accept-Language': 'en-US,en;q=0.9',
                 'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive'
+                'Connection': 'keep-alive',
+                'Referer': 'https://www.sofascore.com/',
+                'Origin': 'https://www.sofascore.com'
               };
 
               response = await fetch(currentUrl, { headers: browserHeaders });
@@ -215,12 +219,14 @@ async function startServer() {
                   break;
               }
               
-              // Tenta Googlebot Smartphone
-              console.log(`Still failing, trying Googlebot Smartphone: ${currentUrl}`);
+              // Tenta Mobile
+              console.log(`Still failing, trying Mobile headers: ${currentUrl}`);
               const mobileHeaders: HeadersInit = {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
                 'Accept': 'application/json, text/plain, */*',
-                'Cache-Control': 'no-cache'
+                'Cache-Control': 'no-cache',
+                'Referer': 'https://www.sofascore.com/',
+                'Origin': 'https://www.sofascore.com'
               };
               
               response = await fetch(currentUrl, { headers: mobileHeaders });

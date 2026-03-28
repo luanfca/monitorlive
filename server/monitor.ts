@@ -28,9 +28,11 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
             const response = await fetch(proxyUrl, {
                 method: 'GET',
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                     'Accept': 'application/json, text/plain, */*',
-                    'Cache-Control': 'no-cache'
+                    'Cache-Control': 'no-cache',
+                    'Referer': 'https://www.sofascore.com/',
+                    'Origin': 'https://www.sofascore.com'
                 },
                 signal: controller.signal
             });
