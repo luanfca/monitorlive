@@ -99,12 +99,11 @@ export const getPlayerHeatmapPoints = async (eventId: number, playerId: number):
 
 // Lista de Proxies Públicos para Rotação (Web / Fallback)
 const PROXY_PROVIDERS = [
-    // 1. AllOrigins (JSON) - Most reliable fallback
+    (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-    // 2. CorsProxy.io
-    (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    // 3. CorsProxy.org
-    (url: string) => `https://corsproxy.org/?${encodeURIComponent(url)}`
+    (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
+    (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`
 ];
 
 // Helper para tentar buscar via múltiplos proxies
@@ -120,10 +119,17 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
         
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000); // Timeout ajustado para 8s
+            const timeoutId = setTimeout(() => controller.abort(), 12000); // Timeout ajustado para 12s
 
             const response = await fetch(proxyUrl, {
                 method: 'GET',
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    'Accept': 'application/json, text/plain, */*',
+                    'Origin': 'https://www.sofascore.com',
+                    'Referer': 'https://www.sofascore.com/',
+                    'Cache-Control': 'no-cache'
+                },
                 signal: controller.signal
             });
 

@@ -78,9 +78,11 @@ async function startServer() {
   });
 
   const PROXY_PROVIDERS = [
+      (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
       (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-      (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-      (url: string) => `https://corsproxy.org/?${encodeURIComponent(url)}`
+      (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+      (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
+      (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`
   ];
 
   const fetchWithProxies = async (targetUrl: string): Promise<any> => {
@@ -91,11 +93,18 @@ async function startServer() {
           const proxyUrl = proxyGen(targetUrl);
           try {
               const controller = new AbortController();
-              // Increase timeout to 8 seconds
-              const timeoutId = setTimeout(() => controller.abort(), 8000);
+              // Increase timeout to 12 seconds
+              const timeoutId = setTimeout(() => controller.abort(), 12000);
 
               const response = await fetch(proxyUrl, {
                   method: 'GET',
+                  headers: {
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                      'Accept': 'application/json, text/plain, */*',
+                      'Origin': 'https://www.sofascore.com',
+                      'Referer': 'https://www.sofascore.com/',
+                      'Cache-Control': 'no-cache'
+                  },
                   signal: controller.signal
               });
               clearTimeout(timeoutId);
@@ -310,7 +319,7 @@ async function startServer() {
   app.listen(port, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${port} (Production mode: ${process.env.NODE_ENV === 'production'})`);
     
-    // Inicia um "cron job interno" para rodar a cada 60 segundos
+    // Inicia um "cron job interno" para rodar a cada 60 segundos (mantém o servidor acordado)
     // Isso ajuda a manter a checagem funcionando enquanto o servidor estiver acordado,
     // já que serviços externos (como cron-job.org) são bloqueados pela tela de proteção do AI Studio.
     setInterval(async () => {
