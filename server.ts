@@ -87,7 +87,8 @@ async function startServer() {
       (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
       (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
       (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
-      (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`
+      (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+      (url: string) => `https://jsonp.afeld.me/?url=${encodeURIComponent(url)}`
   ];
 
   const fetchWithProxies = async (targetUrl: string): Promise<any> => {
@@ -114,7 +115,7 @@ async function startServer() {
                   'Cache-Control': 'no-cache'
               };
               
-              if (proxyUrl.includes('corsproxy.io')) {
+              if (proxyUrl.includes('corsproxy.io') && !domainUrl.includes('.app')) {
                   headers['Origin'] = 'https://www.sofascore.com';
                   headers['Referer'] = 'https://www.sofascore.com/';
               }

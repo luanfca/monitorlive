@@ -105,7 +105,8 @@ const PROXY_PROVIDERS = [
     (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
     (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
     (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
-    (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`
+    (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    (url: string) => `https://jsonp.afeld.me/?url=${encodeURIComponent(url)}`
 ];
 
 // Helper para tentar buscar via múltiplos proxies
@@ -132,7 +133,7 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
             const timeoutId = setTimeout(() => controller.abort(), 12000); // Timeout ajustado para 12s
 
             const headers: any = {};
-            if (proxyUrl.includes('corsproxy.io')) {
+            if (proxyUrl.includes('corsproxy.io') && !domainUrl.includes('.app')) {
                 headers['Origin'] = 'https://www.sofascore.com';
                 headers['Referer'] = 'https://www.sofascore.com/';
             }
@@ -207,16 +208,16 @@ const fetchBackendData = async (endpoint: string) => {
         
         // Mapeamento de Endpoints para URL Real do SofaScore
         if (endpoint === '/live') {
-            directUrl = 'https://api.sofascore.com/api/v1/sport/football/events/live';
+            directUrl = 'https://api.sofascore.app/api/v1/sport/football/events/live';
         } else if (endpoint.startsWith('/lineups/')) {
             const id = endpoint.split('/')[2];
-            directUrl = `https://api.sofascore.com/api/v1/event/${id}/lineups`;
+            directUrl = `https://api.sofascore.app/api/v1/event/${id}/lineups`;
         } else if (endpoint.startsWith('/player/')) {
             // /player/:eventId/:playerId -> /event/:eventId/player/:playerId/statistics
             const parts = endpoint.split('/');
             const eventId = parts[2];
             const playerId = parts[3];
-            directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/statistics`;
+            directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/statistics`;
         } else if (endpoint.startsWith('/heatmap/')) {
              // /heatmap/:eventId/:playerId -> /event/:eventId/player/:playerId/heatmap
              const parts = endpoint.split('/');
@@ -224,16 +225,16 @@ const fetchBackendData = async (endpoint: string) => {
              const playerId = parts[3];
              // Check if it's /data
              if (parts[4] === 'data') {
-                 directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/heatmap`;
+                 directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/heatmap`;
              } else {
-                 directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/heatmap`;
+                 directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/heatmap`;
              }
         } else if (endpoint.startsWith('/sport/football/scheduled-events/')) {
             const date = endpoint.split('/').pop();
-            directUrl = `https://api.sofascore.com/api/v1/sport/football/scheduled-events/${date}`;
+            directUrl = `https://api.sofascore.app/api/v1/sport/football/scheduled-events/${date}`;
         } else {
             // Default fallback
-            directUrl = `https://api.sofascore.com/api/v1${endpoint}`;
+            directUrl = `https://api.sofascore.app/api/v1${endpoint}`;
         }
 
         logService.addLog('info', `Native Fetch: ${directUrl}`);
@@ -247,9 +248,7 @@ const fetchBackendData = async (endpoint: string) => {
                     'Cache-Control': 'no-cache',
                     'Accept': '*/*',
                     'User-Agent': mobileUA,
-                    'Connection': 'keep-alive',
-                    'Origin': 'https://www.sofascore.com',
-                    'Referer': 'https://www.sofascore.com/'
+                    'Connection': 'keep-alive'
                 };
 
                 logService.addLog('info', `Executing Native Request to: ${directUrl}`);
