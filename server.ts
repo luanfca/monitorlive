@@ -180,9 +180,6 @@ async function startServer() {
           url.replace('api.sofascore.app', 'www.sofascore.com').replace('api.sofascore.com', 'www.sofascore.com')
       ];
 
-      let response: Response | null = null;
-      let successfulUrl = url;
-
       let lastError = '';
       for (let i = 0; i < urlsToTry.length; i++) {
           const currentUrl = urlsToTry[i];
@@ -223,6 +220,18 @@ async function startServer() {
           }
       }
       
+      // Ultimate fallback: Try to use a very basic fetch with no headers to see if it's a header issue
+      try {
+          console.log('Trying ultimate fallback with basic fetch...');
+          const basicResponse = await fetch(url);
+          if (basicResponse.ok) {
+              const text = await basicResponse.text();
+              return res.json(JSON.parse(text));
+          }
+      } catch (e) {
+          console.log('Ultimate fallback failed:', e);
+      }
+
       return res.status(500).json({ error: `Failed to fetch data`, details: lastError });
     } catch (error) {
       console.error('Proxy error:', error);

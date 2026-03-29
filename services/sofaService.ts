@@ -192,6 +192,17 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
         } // End of proxies loop
     } // End of domains loop
     
+    try {
+        logService.addLog('info', 'Trying ultimate fallback with basic fetch...');
+        const basicResponse = await fetch(targetUrl);
+        if (basicResponse.ok) {
+            const text = await basicResponse.text();
+            return JSON.parse(text);
+        }
+    } catch (e) {
+        logService.addLog('warn', 'Ultimate fallback failed:', e);
+    }
+    
     throw lastError || new Error('All proxies failed');
 };
 

@@ -111,6 +111,18 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
         }
       } // End of proxies loop
     } // End of domains loop
+    
+    try {
+        console.log('Trying ultimate fallback with basic fetch...');
+        const basicResponse = await fetch(targetUrl);
+        if (basicResponse.ok) {
+            const text = await basicResponse.text();
+            return JSON.parse(text);
+        }
+    } catch (e) {
+        console.log('Ultimate fallback failed:', e);
+    }
+    
     return null;
 };
 
