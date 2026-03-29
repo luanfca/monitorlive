@@ -52,15 +52,20 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
               const controller = new AbortController();
               const timeoutId = setTimeout(() => controller.abort(), 15000);
 
+            const headers: any = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Cache-Control': 'no-cache'
+            };
+            
+            if (proxyUrl.includes('corsproxy.io')) {
+                headers['Origin'] = 'https://www.sofascore.com';
+                headers['Referer'] = 'https://www.sofascore.com/';
+            }
+
             const response = await fetch(proxyUrl, {
                 method: 'GET',
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                    'Accept': 'application/json, text/plain, */*',
-                    'Cache-Control': 'no-cache',
-                    'Referer': 'https://www.sofascore.com/',
-                    'Origin': 'https://www.sofascore.com'
-                },
+                headers,
                 signal: controller.signal
             });
             clearTimeout(timeoutId);

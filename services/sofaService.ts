@@ -131,8 +131,15 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 12000); // Timeout ajustado para 12s
 
+            const headers: any = {};
+            if (proxyUrl.includes('corsproxy.io')) {
+                headers['Origin'] = 'https://www.sofascore.com';
+                headers['Referer'] = 'https://www.sofascore.com/';
+            }
+
             const response = await fetch(proxyUrl, {
                 method: 'GET',
+                headers,
                 signal: controller.signal
             });
 
