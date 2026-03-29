@@ -182,11 +182,16 @@ async function startServer() {
           console.log(`Trying URL ${i + 1}/${urlsToTry.length}: ${currentUrl}`);
           
           try {
+              const isApp = currentUrl.includes('.app');
               const gotResponse = await gotScraping({
                   url: currentUrl,
                   responseType: 'text',
                   timeout: { request: 10000 },
-                  headers: {
+                  headerGeneratorOptions: {
+                      devices: isApp ? ['mobile'] : ['desktop', 'mobile'],
+                      operatingSystems: isApp ? ['android', 'ios'] : ['windows', 'macos', 'linux', 'android', 'ios']
+                  },
+                  headers: isApp ? {} : {
                       'Referer': 'https://www.sofascore.com/',
                       'Origin': 'https://www.sofascore.com'
                   }

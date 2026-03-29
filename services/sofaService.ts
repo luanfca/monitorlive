@@ -99,7 +99,7 @@ export const getPlayerHeatmapPoints = async (eventId: number, playerId: number):
 
 // Lista de Proxies Públicos para Rotação (Web / Fallback)
 const PROXY_PROVIDERS = [
-    (url: string) => `https://api.allorigins.hexlet.app/get?url=${encodeURIComponent(url)}`,
+    (url: string) => `https://yacdn.org/proxy/${url}`,
     (url: string) => `https://corsproxy.org/?${encodeURIComponent(url)}`,
     (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
@@ -324,25 +324,25 @@ const fetchBackendData = async (endpoint: string) => {
         // Mapeamento de Endpoints para URL Real do SofaScore (para fallback)
         let directUrl = '';
         if (endpoint === '/live') {
-            directUrl = 'https://api.sofascore.com/api/v1/sport/football/events/live';
+            directUrl = 'https://api.sofascore.app/api/v1/sport/football/events/live';
         } else if (endpoint.startsWith('/lineups/')) {
             const id = endpoint.split('/')[2];
-            directUrl = `https://api.sofascore.com/api/v1/event/${id}/lineups`;
+            directUrl = `https://api.sofascore.app/api/v1/event/${id}/lineups`;
         } else if (endpoint.startsWith('/player/')) {
             const parts = endpoint.split('/');
             const eventId = parts[2];
             const playerId = parts[3];
-            directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/statistics`;
+            directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/statistics`;
         } else if (endpoint.startsWith('/heatmap/')) {
              const parts = endpoint.split('/');
              const eventId = parts[2];
              const playerId = parts[3];
-             directUrl = `https://api.sofascore.com/api/v1/event/${eventId}/player/${playerId}/heatmap`;
+             directUrl = `https://api.sofascore.app/api/v1/event/${eventId}/player/${playerId}/heatmap`;
         } else if (endpoint.startsWith('/sport/football/scheduled-events/')) {
             const date = endpoint.split('/').pop();
-            directUrl = `https://api.sofascore.com/api/v1/sport/football/scheduled-events/${date}`;
+            directUrl = `https://api.sofascore.app/api/v1/sport/football/scheduled-events/${date}`;
         } else {
-            directUrl = `https://api.sofascore.com/api/v1${endpoint}`;
+            directUrl = `https://api.sofascore.app/api/v1${endpoint}`;
         }
 
         // Try direct fetch first (SofaScore allows CORS for some endpoints)
@@ -361,7 +361,12 @@ const fetchBackendData = async (endpoint: string) => {
         try {
             const response = await fetch(url);
             if (!response.ok) {
-                throw new Error(`Local proxy error: ${response.status}`);
+                let errorDetails = '';
+                try {
+                    const errData = await response.json();
+                    errorDetails = errData.details || errData.error || '';
+                } catch (e) {}
+                throw new Error(`Local proxy error: ${response.status} ${errorDetails}`);
             }
             if (response.status === 204) return null;
             

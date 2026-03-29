@@ -2,7 +2,7 @@ import { messaging } from './firebaseAdmin.js';
 import { gotScraping } from 'got-scraping';
 
 const PROXY_PROVIDERS = [
-    (url: string) => `https://api.allorigins.hexlet.app/get?url=${encodeURIComponent(url)}`,
+    (url: string) => `https://yacdn.org/proxy/${url}`,
     (url: string) => `https://corsproxy.org/?${encodeURIComponent(url)}`,
     (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
@@ -22,11 +22,16 @@ const fetchWithProxies = async (targetUrl: string): Promise<any> => {
     
     for (const domainUrl of domainsToTry) {
         try {
+            const isApp = domainUrl.includes('.app');
             const gotResponse = await gotScraping({
                 url: domainUrl,
                 responseType: 'text',
                 timeout: { request: 10000 },
-                headers: {
+                headerGeneratorOptions: {
+                    devices: isApp ? ['mobile'] : ['desktop', 'mobile'],
+                    operatingSystems: isApp ? ['android', 'ios'] : ['windows', 'macos', 'linux', 'android', 'ios']
+                },
+                headers: isApp ? {} : {
                     'Referer': 'https://www.sofascore.com/',
                     'Origin': 'https://www.sofascore.com'
                 }
